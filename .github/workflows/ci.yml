@@ -46,19 +46,34 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The test runner needs --experimental-strip-types (Node >=22.6). The
+      # SHIPPED code is plain JS and runs on the >=20.10 in `engines`, which the
+      # build and smoke steps below verify on that exact floor.
       - name: Test
+        if: matrix.node != '20.10'
         run: npm test
 
       - name: CLI smoke test
         shell: bash
         run: |
+          set -euo pipefail
           node dist/cli.js --version
           node dist/cli.js --help > /dev/null
-          # Must exit non-zero with a useful message, not a stack trace, when
-          # there are no credentials at all.
-          FIBONACCI_HOME="$(mktemp -d)" CODEX_HOME="$(mktemp -d)" \
-            node dist/cli.js "hello" 2>&1 | grep -qi "codex\|auth\|api key" \
-            && echo "unauthenticated path gives an actionable message"
+
+          # With no credentials anywhere, the CLI must fail with a non-zero exit
+          # and an actionable message — not a stack trace, and not success.
+          # `|| true` keeps `set -e` from treating the expected failure as fatal.
+          out=$(FIBONACCI_HOME="$(mktemp -d)" CODEX_HOME="$(mktemp -d)" \
+                node dist/cli.js "hello" 2>&1) && rc=0 || rc=$?
+
+          echo "exit=$rc"
+          echo "$out"
+          test "$rc" -ne 0 || { echo "::error::expected a non-zero exit with no credentials"; exit 1; }
+          grep -qiE 'codex|auth|api key' <<< "$out" \
+            || { echo "::error::error message is not actionable"; exit 1; }
+          grep -qiE 'at .*\(.*:[0-9]+:[0-9]+\)' <<< "$out" \
+            && { echo "::error::leaked a stack trace to the user"; exit 1; } || true
+          echo "unauthenticated path: exits $rc with an actionable message"
 
   version-lockstep:
     name: version lockstep

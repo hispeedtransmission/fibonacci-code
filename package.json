@@ -51,7 +51,8 @@
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "//test": "Glob is QUOTED so Node expands it, not the shell — PowerShell does not glob, and an unquoted pattern reaches Node verbatim on Windows. Needs Node >=22.6 for --experimental-strip-types; the shipped dist/ is plain JS and runs on the >=20.10 declared in engines.",
+    "test": "node --test --experimental-strip-types \"test/**/*.test.ts\"",
     "lint": "npm run typecheck",
     "prepublishOnly": "npm run clean && npm run build && npm run typecheck",
     "dev": "node --experimental-strip-types src/cli.ts"

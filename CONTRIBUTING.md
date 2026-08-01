@@ -17,6 +17,8 @@ npm run typecheck
 node --experimental-strip-types src/cli.ts "hello"
 ```
 
+> **Node version note.** The package `engines` floor is **20.10**, and that is real — the shipped `dist/` is plain JS and CI builds and smoke-tests the CLI on exactly that version. But `npm test` needs **Node ≥ 22.6**, because running the TypeScript sources directly relies on `--experimental-strip-types`, which does not exist on 20.x. Develop on 22+; the floor is for users, not contributors.
+
 Python side:
 
 ```bash
