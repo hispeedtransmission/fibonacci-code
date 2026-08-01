@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { ExitCode, FibonacciError, UsageError, CancelledError } from './errors.ts';
 import { loadConfig, APPROVAL_MODES, type ApprovalMode, type ConfigOverrides } from './config.ts';
 import { VERSION, REPO_URL } from './version.ts';
@@ -249,12 +251,19 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
 /**
  * Only run when invoked as a program, so the test suite can import `main`
  * without the CLI executing itself on import.
+ *
+ * Both sides MUST be realpath'd. `npm install -g` installs the package under
+ * `lib/node_modules/...` and symlinks `bin/fib` at it, so `process.argv[1]` is
+ * the symlink while `import.meta.url` is the resolved target. Comparing them
+ * literally makes this false for every globally installed user — the binary
+ * then exits 0 having done nothing at all, which is both catastrophic and
+ * completely silent. `pnpm`, `yarn` and `bun` all symlink similarly.
  */
 const invokedDirectly = (() => {
   const entry = process.argv[1];
   if (!entry) return false;
   try {
-    return import.meta.url === new URL(`file://${resolve(entry)}`).href;
+    return realpathSync(resolve(entry)) === realpathSync(fileURLToPath(import.meta.url));
   } catch {
     return false;
   }

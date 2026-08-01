@@ -148,11 +148,35 @@ jobs:
           # Credentials, tests and sources must never ship.
           ! grep -qE 'package/(test/|src/|\.github/|auth\.json|\.env)' /tmp/files.txt
 
+      # Assert on OUTPUT, not just the exit code. A silent success is exactly
+      # how the symlinked-bin bug shipped once: `npm install -g` symlinks
+      # bin/fib at dist/cli.js, so argv[1] is the symlink while import.meta.url
+      # is the target. The entry-point guard compared them literally, decided
+      # it was being imported rather than run, and exited 0 having printed
+      # nothing. `fib --version` "passed".
       - name: Installed package actually runs
         run: |
+          set -euo pipefail
           npm install -g ./fibonacci-code-*.tgz
-          fib --version
-          fibonacci --version
+
+          for bin in fib fibonacci; do
+            got=$("$bin" --version)
+            echo "$bin --version -> '$got'"
+            test -n "$got" || { echo "::error::$bin produced NO output — entry point did not execute"; exit 1; }
+            echo "$got" | grep -qE '^fibonacci [0-9]+\.[0-9]+\.[0-9]+$' \
+              || { echo "::error::$bin printed an unexpected version string: $got"; exit 1; }
+          done
+
+          help=$(fib --help)
+          test -n "$help" || { echo "::error::fib --help produced no output"; exit 1; }
+          echo "$help" | grep -q 'USAGE' || { echo "::error::help text missing USAGE"; exit 1; }
+
+          # The symlink must be followed correctly regardless of how it is
+          # reached, including through an extra indirection.
+          ln -s "$(command -v fib)" /tmp/fib-via-second-symlink
+          got=$(/tmp/fib-via-second-symlink --version)
+          test -n "$got" || { echo "::error::chained symlink produced no output"; exit 1; }
+          echo "chained symlink -> '$got'"
 
       - uses: actions/setup-python@v5
         with:
