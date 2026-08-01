@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -69,7 +69,12 @@ test('resolveInWorkspace: symlink escape is caught even when the linked target h
   assert.throws(() => resolveInWorkspace(root, 'link2/secret.txt'), UsageError);
 });
 
-test('resolveInWorkspace: a workspace rooted directly under /tmp is not falsely rejected (macOS /tmp -> /private/tmp)', () => {
+test('resolveInWorkspace: a workspace rooted directly under /tmp is not falsely rejected (macOS /tmp -> /private/tmp)', {
+  // The bug this guards against only exists where /tmp is itself a symlink,
+  // which is a POSIX arrangement. Windows has no /tmp at all, so hardcoding
+  // the path there fails with ENOENT and tests nothing.
+  skip: !existsSync('/tmp') ? 'no /tmp on this platform' : false,
+}, () => {
   // This reproduces the exact bug shape: comparing an unresolved root
   // against a resolved candidate rejects every path when root's own
   // symlink chain (e.g. /tmp -> /private/tmp) differs from the candidate's.
