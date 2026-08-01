@@ -21,6 +21,13 @@ auth.json
 .env.*
 !.env.example
 
+# Agent/tooling scaffolding — not part of the product
+.claude-flow/
+.swarm/
+.hive-mind/
+memory/
+coordination/
+
 # OS / editor
 .DS_Store
 .idea/
