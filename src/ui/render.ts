@@ -28,6 +28,23 @@ const BRAND_COLOR = '38;5;214'; // warm amber/gold; see ansi.ts module comment o
 const MIN_BOX_WIDTH = 24;
 const MAX_BOX_WIDTH = 72;
 
+/**
+ * Usable terminal width.
+ *
+ * `process.stdout.columns` is `undefined` whenever stdout is not a TTY, and
+ * Node never consults the `COLUMNS` environment variable itself. Checking
+ * COLUMNS second means the banner still lays out correctly when stdout is
+ * piped but stderr (where the banner actually goes) is a terminal, and it
+ * gives tests and CI a way to exercise narrow layouts without a pty.
+ */
+export function terminalWidth(): number {
+  const fromTty = process.stderr.columns || process.stdout.columns;
+  if (fromTty && fromTty > 0) return fromTty;
+  const fromEnv = Number.parseInt(process.env['COLUMNS'] ?? '', 10);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  return 80;
+}
+
 interface BoxChars {
   tl: string;
   tr: string;
@@ -55,6 +72,32 @@ function padVisible(s: string, width: number): string {
  * informative part; the drive-by/project-root prefix is what a user can
  * afford to lose.
  */
+/**
+ * Truncate from the RIGHT, keeping the head.
+ *
+ * Direction is content-dependent, not stylistic. A path's tail identifies it
+ * (`…/packages/backend`), so paths truncate from the left. A model name's head
+ * identifies it — `qwen3-coder-30b…` is informative where `…3b-instruct` is
+ * nearly useless — so names truncate from the right.
+ */
+function truncateRight(s: string, width: number): string {
+  if (visibleWidth(s) <= width) return s;
+
+  const ellipsis = supportsUnicode() ? '…' : '...';
+  const budget = width - visibleWidth(ellipsis);
+  if (budget <= 0) return ellipsis.slice(0, Math.max(0, width));
+
+  let kept = '';
+  let used = 0;
+  for (const ch of s) {
+    const w = visibleWidth(ch);
+    if (used + w > budget) break;
+    kept += ch;
+    used += w;
+  }
+  return kept + ellipsis;
+}
+
 function truncateLeft(s: string, width: number): string {
   if (visibleWidth(s) <= width) return s;
 
@@ -86,8 +129,7 @@ export function banner(opts: {
   version: string;
 }): string {
   const chars = boxChars();
-  const termWidth = process.stdout.columns || 80;
-  const boxWidth = Math.max(MIN_BOX_WIDTH, Math.min(MAX_BOX_WIDTH, termWidth - 2));
+  const boxWidth = Math.max(MIN_BOX_WIDTH, Math.min(MAX_BOX_WIDTH, terminalWidth() - 2));
   const innerWidth = boxWidth - 4; // border + 1-space pad on each side
 
   // The name lives in the top border rather than on its own row. This is
@@ -120,7 +162,7 @@ export function banner(opts: {
       : [
           top,
           rule(Style.bold(truncateLeft(shownCwd, innerWidth))),
-          rule(Style.dim(truncateLeft(meta, innerWidth))),
+          rule(Style.dim(truncateRight(meta, innerWidth))),
           bottom,
         ];
 
