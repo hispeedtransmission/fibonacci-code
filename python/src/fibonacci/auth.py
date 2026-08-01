@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import contextlib
 import json
 import os
 import tempfile
@@ -296,7 +297,9 @@ class CodexAuth(Auth):
                 f"{self.path} is not valid JSON ({exc}). Re-run `codex login` to rewrite it."
             ) from exc
         if not isinstance(record, dict):
-            raise AuthError(f"{self.path} should contain a JSON object, got {type(record).__name__}.")
+            raise AuthError(
+                f"{self.path} should contain a JSON object, got {type(record).__name__}."
+            )
 
         mode = record.get("auth_mode")
         if mode not in (None, "chatgpt"):
@@ -404,7 +407,9 @@ class CodexAuth(Auth):
                 headers={"Content-Type": "application/json"},
             )
         except httpx.HTTPError as exc:
-            raise NetworkError(f"Could not reach {CODEX_TOKEN_ENDPOINT} to refresh credentials: {exc}") from exc
+            raise NetworkError(
+                f"Could not reach {CODEX_TOKEN_ENDPOINT} to refresh credentials: {exc}"
+            ) from exc
 
         if response.status_code >= 400:
             raise AuthError(
@@ -445,7 +450,11 @@ def _write_private_json(path: Path, record: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".auth-", suffix=".tmp")
     try:
-        os.fchmod(fd, 0o600)
+        # mkstemp already creates the file 0600; this is belt-and-braces for
+        # exotic umask/ACL setups. os.fchmod is absent on Windows, where the
+        # POSIX mode is meaningless anyway.
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(record, handle, indent=2)
             handle.write("\n")
@@ -454,10 +463,8 @@ def _write_private_json(path: Path, record: Mapping[str, Any]) -> None:
         os.replace(tmp_name, path)
     except BaseException:
         # Never leave a partial credential file behind, including on Ctrl-C.
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_name)
-        except OSError:
-            pass
         raise
 
 

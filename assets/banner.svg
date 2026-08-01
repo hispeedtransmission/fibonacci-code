@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-label="Fibonacci — a terminal coding agent on your own subscription">
+  <title>Fibonacci — a terminal coding agent on your own subscription</title>
+  <defs>
+    <linearGradient id="bgGold" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#C97B29"/>
+      <stop offset="55%" stop-color="#E9A23B"/>
+      <stop offset="100%" stop-color="#F5C46B"/>
+    </linearGradient>
+    <linearGradient id="bgFade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#17130F"/>
+      <stop offset="100%" stop-color="#0E0C0A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="340" rx="16" fill="url(#bgFade)"/>
+  <rect x="0.5" y="0.5" width="1199" height="339" rx="16" fill="none" stroke="#E9A23B" stroke-opacity="0.22"/>
+
+  <!-- Spiral mark: 34x21 units scaled to 260 wide, inset left. -->
+  <g transform="translate(78 62) scale(6.1)">
+    <g fill="none" stroke="#E9A23B" stroke-opacity="0.13" stroke-width="0.13">
+      <rect x="0"  y="0"  width="21" height="21"/>
+      <rect x="21" y="0"  width="13" height="13"/>
+      <rect x="26" y="13" width="8"  height="8"/>
+      <rect x="21" y="16" width="5"  height="5"/>
+      <rect x="21" y="13" width="3"  height="3"/>
+      <rect x="24" y="13" width="2"  height="2"/>
+    </g>
+    <path
+      d="M 25 16 A 1 1 0 0 1 26 15 A 2 2 0 0 1 24 13 A 3 3 0 0 1 21 16 A 5 5 0 0 1 26 21 A 8 8 0 0 1 34 13 A 13 13 0 0 1 21 0 A 21 21 0 0 1 0 21"
+      fill="none" stroke="url(#bgGold)" stroke-width="0.95"
+      stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="25" cy="16" r="0.6" fill="#F5C46B"/>
+  </g>
+
+  <g font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace">
+    <text x="540" y="132" font-size="72" font-weight="600" fill="#F2EDE4" letter-spacing="-1.5">fibonacci</text>
+    <text x="540" y="184" font-size="25" fill="#E9A23B" letter-spacing="0.4">a terminal coding agent</text>
+    <text x="540" y="222" font-size="21" fill="#8A8073" letter-spacing="0.2">on your own ChatGPT subscription — or any OpenAI-compatible endpoint</text>
+
+    <g font-size="19" fill="#6F675C">
+      <text x="540" y="278">$</text>
+      <text x="562" y="278" fill="#C3BAAB">npm i -g fibonacci-code</text>
+      <text x="820" y="278">·</text>
+      <text x="844" y="278" fill="#C3BAAB">pip install fibonacci-code</text>
+    </g>
+  </g>
+
+  <g fill="none" stroke="#E9A23B" stroke-opacity="0.30">
+    <path d="M540 246 H1122" stroke-width="1"/>
+  </g>
+</svg>

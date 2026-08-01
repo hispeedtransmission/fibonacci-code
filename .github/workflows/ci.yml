@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: node ${{ matrix.node }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20.10 is the floor declared in package.json — test the floor, not just
+        # the latest, or `engines` becomes a claim nobody has verified.
+        node: ['20.10', '22', '24']
+        os: [ubuntu-latest]
+        include:
+          - node: '22'
+            os: macos-latest
+          - node: '22'
+            os: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: CLI smoke test
+        shell: bash
+        run: |
+          node dist/cli.js --version
+          node dist/cli.js --help > /dev/null
+          # Must exit non-zero with a useful message, not a stack trace, when
+          # there are no credentials at all.
+          FIBONACCI_HOME="$(mktemp -d)" CODEX_HOME="$(mktemp -d)" \
+            node dist/cli.js "hello" 2>&1 | grep -qi "codex\|auth\|api key" \
+            && echo "unauthenticated path gives an actionable message"
+
+  version-lockstep:
+    name: version lockstep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: package.json, src/version.ts and pyproject.toml must agree
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          src=$(grep -oE "VERSION = '[^']+'" src/version.ts | cut -d"'" -f2)
+          py=$(grep -oE '^version = "[^"]+"' python/pyproject.toml | cut -d'"' -f2)
+          echo "package.json=$pkg  src/version.ts=$src  pyproject=$py"
+          test "$pkg" = "$src" || { echo "::error::package.json ($pkg) != src/version.ts ($src)"; exit 1; }
+          test "$pkg" = "$py"  || { echo "::error::package.json ($pkg) != pyproject.toml ($py)"; exit 1; }
+
+  python:
+    name: python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.9', '3.11', '3.13']
+    defaults:
+      run:
+        working-directory: python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src/
+
+      - name: Test
+        run: pytest -q
+
+      - name: Import and CLI smoke test
+        run: |
+          python -c "import fibonacci; print(fibonacci.__version__)"
+          fib --version
+          fib --help > /dev/null
+
+  package:
+    name: package integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: npm pack contains a runnable CLI and no junk
+        run: |
+          npm pack --silent
+          tar tzf fibonacci-code-*.tgz | sort > /tmp/files.txt
+          cat /tmp/files.txt
+          grep -q 'package/dist/cli.js' /tmp/files.txt
+          grep -q 'package/README.md'   /tmp/files.txt
+          grep -q 'package/LICENSE'     /tmp/files.txt
+          # Credentials, tests and sources must never ship.
+          ! grep -qE 'package/(test/|src/|\.github/|auth\.json|\.env)' /tmp/files.txt
+
+      - name: Installed package actually runs
+        run: |
+          npm install -g ./fibonacci-code-*.tgz
+          fib --version
+          fibonacci --version
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Python distributions build cleanly
+        working-directory: python
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*

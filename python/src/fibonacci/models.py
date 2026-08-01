@@ -210,7 +210,7 @@ class Usage:
     reasoning_tokens: int = 0
 
     @classmethod
-    def from_responses(cls, payload: Optional[Mapping[str, Any]]) -> "Usage":
+    def from_responses(cls, payload: Optional[Mapping[str, Any]]) -> Usage:
         """Parse the Responses API usage block, including nested detail counts."""
         if not payload:
             return cls()
@@ -226,7 +226,7 @@ class Usage:
         )
 
     @classmethod
-    def from_chat(cls, payload: Optional[Mapping[str, Any]]) -> "Usage":
+    def from_chat(cls, payload: Optional[Mapping[str, Any]]) -> Usage:
         """Parse the Chat Completions usage block.
 
         Field names differ from the Responses API (``prompt_tokens`` rather
@@ -345,9 +345,7 @@ def to_wire_items(items: Sequence[InputItem], *, responses: bool) -> List[Dict[s
     """
     wire: List[Dict[str, Any]] = []
     for item in items:
-        if isinstance(item, Message):
-            wire.append(item.to_responses_item() if responses else item.to_chat_message())
-        elif isinstance(item, ToolResult):
+        if isinstance(item, (Message, ToolResult)):
             wire.append(item.to_responses_item() if responses else item.to_chat_message())
         elif isinstance(item, ToolCall):
             if responses:

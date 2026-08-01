@@ -140,7 +140,7 @@ def _cmd_prompt(args: List[str]) -> int:
 
     prompt = _read_prompt(parsed.prompt)
     if not prompt:
-        sys.stderr.write("fib: no prompt given. Try `fib \"your question\"` or `fib --help`.\n")
+        sys.stderr.write('fib: no prompt given. Try `fib "your question"` or `fib --help`.\n')
         return EXIT_USAGE
 
     return asyncio.run(_stream_prompt(prompt, parsed))
@@ -218,8 +218,10 @@ def _cmd_auth(args: List[str]) -> int:
             raise
         print(f"{'provider':<12} api-key")
         print(f"{'key source':<12} ${api_key_source}")
-        print(f"{'credentials':<12} not signed in to ChatGPT ({codex_auth_path(parsed.codex_home)})")
-        print(f"{'hint':<12} use `fib --base-url <url> \"prompt\"` with this key")
+        print(
+            f"{'credentials':<12} not signed in to ChatGPT ({codex_auth_path(parsed.codex_home)})"
+        )
+        print(f'{"hint":<12} use `fib --base-url <url> "prompt"` with this key')
         return EXIT_OK
 
     print(f"{'provider':<12} chatgpt (ChatGPT subscription)")

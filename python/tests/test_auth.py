@@ -32,7 +32,6 @@ from fibonacci.errors import AuthError, NetworkError
 
 from .conftest import ACCOUNT_ID, access_token, make_jwt, mock_client, write_auth_json
 
-
 # -- redaction ---------------------------------------------------------------
 
 

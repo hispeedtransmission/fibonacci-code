@@ -76,12 +76,22 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
-# UP006/UP035 would rewrite typing.Dict -> dict in runtime positions, which the
-# 3.9 floor does not always allow; annotations are already future-imported.
-ignore = ["UP006", "UP035", "UP038"]
+# PEP 585/604 syntax (`dict[str, int]`, `X | None`) is legal in *annotations*
+# on 3.9 thanks to `from __future__ import annotations`, but not at runtime —
+# and these dataclasses are public API, so `typing.get_type_hints()` on them
+# has to keep working on 3.9. Optional/Union it is, consistently, until the
+# floor moves to 3.10.
+ignore = ["UP006", "UP007", "UP035", "UP045"]
+
+[tool.ruff.lint.per-file-ignores]
+# Nested `async with` (mock transport, then client built from it) reads better
+# than one combined statement, and parenthesized context managers are 3.10+.
+"tests/*" = ["SIM117"]
 
 [tool.mypy]
-python_version = "3.9"
+# No `python_version` pin: current mypy refuses targets below 3.10, and the 3.9
+# floor is enforced where it actually matters — ruff's target-version and the
+# CI interpreter matrix.
 strict = true
 warn_unreachable = true
 files = ["src/fibonacci"]

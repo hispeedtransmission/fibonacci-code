@@ -21,7 +21,7 @@ async def parse(chunks: Sequence[bytes]) -> List[SSEEvent]:
 
 
 async def test_parses_a_single_event() -> None:
-    events = await parse([b"event: ping\ndata: {\"a\": 1}\n\n"])
+    events = await parse([b'event: ping\ndata: {"a": 1}\n\n'])
     assert events == [SSEEvent(data='{"a": 1}', event="ping")]
     assert events[0].json() == {"a": 1}
 
@@ -40,7 +40,7 @@ async def test_multibyte_characters_survive_every_split_point() -> None:
     Splitting at *every* offset is the point: one of them is guaranteed to land
     inside a multi-byte sequence.
     """
-    raw = 'data: café — 日本語 🎉\n\n'.encode("utf-8")
+    raw = "data: café — 日本語 🎉\n\n".encode()
     for split in range(1, len(raw)):
         events = await parse([raw[:split], raw[split:]])
         assert [e.data for e in events] == ["café — 日本語 🎉"], f"split at {split}"
@@ -90,7 +90,7 @@ async def test_event_with_no_data_is_discarded_but_resets_state() -> None:
 
 
 async def test_leading_bom_is_stripped() -> None:
-    events = await parse(["﻿data: x\n\n".encode("utf-8")])
+    events = await parse(["﻿data: x\n\n".encode()])
     assert events[0].data == "x"
 
 

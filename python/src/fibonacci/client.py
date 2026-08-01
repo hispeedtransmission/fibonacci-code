@@ -24,7 +24,7 @@ from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Sequence, 
 import httpx
 
 from ._version import __version__
-from .auth import Auth, resolve_auth
+from .auth import Auth, PathLike, resolve_auth
 from .errors import AuthError, FibonacciError, NetworkError, ProviderError
 from .models import (
     Completed,
@@ -199,7 +199,6 @@ class CodexBackend(_Backend):
         # Always emit a terminal event, even if the stream ended early. A
         # consumer that waits for Completed should never hang because a proxy
         # closed the connection without a final frame.
-        _ = saw_terminal
         yield Completed(usage=usage, items=tuple(items))
 
     async def models(self) -> List[ModelInfo]:
@@ -327,8 +326,9 @@ class OpenAIBackend(_Backend):
                     for fragment in delta.get("tool_calls") or []:
                         assembler.feed(fragment)
 
-                    if choices[0].get("finish_reason"):
-                        break
+                    # Deliberately no `break` on finish_reason: several servers
+                    # send a usage-only chunk *after* the one that carries it,
+                    # and stopping early would silently discard token counts.
         except httpx.HTTPError as exc:
             raise NetworkError(f"Request to {url} failed: {exc}") from exc
 
@@ -484,12 +484,12 @@ class Fibonacci:
         cls,
         *,
         model: str = CHATGPT_MODEL,
-        codex_home: Optional[str] = None,
+        codex_home: Optional[PathLike] = None,
         instructions: Optional[str] = None,
         reasoning_effort: str = "medium",
         http_client: Optional[httpx.AsyncClient] = None,
         timeout: Optional[httpx.Timeout] = None,
-    ) -> "Fibonacci":
+    ) -> Fibonacci:
         """Build a client backed by an existing ChatGPT/Codex subscription.
 
         Credentials are read through to the Codex CLI's own ``auth.json`` on
@@ -523,7 +523,7 @@ class Fibonacci:
         instructions: Optional[str] = None,
         http_client: Optional[httpx.AsyncClient] = None,
         timeout: Optional[httpx.Timeout] = None,
-    ) -> "Fibonacci":
+    ) -> Fibonacci:
         """Build a client for any OpenAI-compatible ``/chat/completions`` server.
 
         :param base_url: Root that ``/chat/completions`` and ``/models`` hang
@@ -646,14 +646,16 @@ class Fibonacci:
         if self._owns_http:
             await self._http.aclose()
 
-    async def __aenter__(self) -> "Fibonacci":
+    async def __aenter__(self) -> Fibonacci:
         return self
 
     async def __aexit__(self, *exc_info: object) -> None:
         await self.aclose()
 
     def __repr__(self) -> str:
-        return f"Fibonacci(backend={self._backend.name!r}, model={self.model!r}, auth={self._auth!r})"
+        return (
+            f"Fibonacci(backend={self._backend.name!r}, model={self.model!r}, auth={self._auth!r})"
+        )
 
 
 # -- module helpers ----------------------------------------------------------

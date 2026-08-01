@@ -12,6 +12,7 @@
  * into a redirected file.
  */
 
+import { homedir } from 'node:os';
 import {
   Style,
   styleCode,
@@ -89,27 +90,52 @@ export function banner(opts: {
   const boxWidth = Math.max(MIN_BOX_WIDTH, Math.min(MAX_BOX_WIDTH, termWidth - 2));
   const innerWidth = boxWidth - 4; // border + 1-space pad on each side
 
-  const top = chars.tl + chars.h.repeat(boxWidth - 2) + chars.tr;
+  // The name lives in the top border rather than on its own row. This is
+  // chrome printed on every single invocation, so it earns its height: three
+  // lines total, and every character in them is information the user needs.
+  const label = ` fibonacci `;
+  const titleRun = chars.h.repeat(1) + label + chars.h.repeat(Math.max(0, boxWidth - 3 - visibleWidth(label)));
+  const top = chars.tl + colorizeTitleRun(titleRun, label) + chars.tr;
   const bottom = chars.bl + chars.h.repeat(boxWidth - 2) + chars.br;
   const rule = (content: string) => `${chars.v} ${padVisible(content, innerWidth)} ${chars.v}`;
 
-  const title = styleCode(BRAND_COLOR, Style.bold(`fibonacci-code v${opts.version}`));
-  const cwd = Style.dim(truncateLeft(opts.cwd, innerWidth));
+  // Collapse $HOME to `~`: the informative part of a path is its tail, and the
+  // home prefix is the same on every line the user will ever read.
+  const home = homedir();
+  const shownCwd = opts.cwd === home ? '~' : opts.cwd.startsWith(`${home}/`) ? `~${opts.cwd.slice(home.length)}` : opts.cwd;
 
-  const labelWidth = Math.max('model'.length, 'provider'.length, 'approval'.length);
-  const field = (label: string, value: string) => `${Style.dim(label.padEnd(labelWidth))} ${value}`;
+  // Strip the parenthetical account detail; `fib auth status` is where that
+  // belongs. Here we want the shortest phrase that says which account pays.
+  const shortProvider = opts.provider.replace(/\s*\(.*?\)\s*/, ' ').replace(/\s+—.*$/, '').trim();
 
-  const lines = [
-    top,
-    rule(title),
-    rule(cwd),
-    rule(''),
-    rule(field('model', opts.model)),
-    rule(field('provider', opts.provider)),
-    rule(field('approval', opts.approval)),
-    bottom,
-  ];
+  const meta = [opts.model, shortProvider, opts.approval].filter((s) => s !== '').join(' · ');
+
+  // Try one line. Only if the path and the metadata genuinely cannot share a
+  // row do we stack — and once stacked, the path gets the whole width back
+  // rather than keeping the cramped budget that failed.
+  const shared = truncateLeft(shownCwd, Math.max(12, innerWidth - visibleWidth(meta) - 3));
+  const lines =
+    visibleWidth(`${shared}   ${meta}`) <= innerWidth && visibleWidth(shownCwd) === visibleWidth(shared)
+      ? [top, rule(`${Style.bold(shared)}   ${Style.dim(meta)}`), bottom]
+      : [
+          top,
+          rule(Style.bold(truncateLeft(shownCwd, innerWidth))),
+          rule(Style.dim(truncateLeft(meta, innerWidth))),
+          bottom,
+        ];
+
   return lines.join('\n');
+}
+
+/** Brand-colour the word inside the top border, leave the rule itself dim. */
+function colorizeTitleRun(run: string, label: string): string {
+  const idx = run.indexOf(label);
+  if (idx === -1) return Style.dim(run);
+  return (
+    Style.dim(run.slice(0, idx)) +
+    styleCode(BRAND_COLOR, Style.bold(label)) +
+    Style.dim(run.slice(idx + label.length))
+  );
 }
 
 export function toolLine(opts: {
