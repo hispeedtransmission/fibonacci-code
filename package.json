@@ -1,0 +1,67 @@
+{
+  "name": "fibonacci-code",
+  "version": "0.1.0",
+  "description": "A terminal coding agent that runs on your existing ChatGPT/Codex subscription or any OpenAI-compatible endpoint. Zero runtime dependencies.",
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "coding-agent",
+    "codex",
+    "openai",
+    "chatgpt",
+    "llm",
+    "terminal",
+    "repl",
+    "openai-compatible",
+    "developer-tools"
+  ],
+  "homepage": "https://github.com/hispeedtransmission/fibonacci-code#readme",
+  "bugs": {
+    "url": "https://github.com/hispeedtransmission/fibonacci-code/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hispeedtransmission/fibonacci-code.git"
+  },
+  "license": "MIT",
+  "author": "Chadwycke Smith",
+  "type": "module",
+  "bin": {
+    "fib": "./dist/cli.js",
+    "fibonacci": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "lint": "npm run typecheck",
+    "prepublishOnly": "npm run clean && npm run build && npm run typecheck",
+    "dev": "node --experimental-strip-types src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": false
+  }
+}

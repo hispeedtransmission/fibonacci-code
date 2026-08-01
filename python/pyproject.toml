@@ -1,0 +1,91 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fibonacci-code"
+version = "0.1.0"
+description = "A terminal coding agent that runs on your existing ChatGPT/Codex subscription or any OpenAI-compatible endpoint."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Chadwycke Smith" }]
+keywords = [
+    "ai",
+    "agent",
+    "cli",
+    "coding-agent",
+    "codex",
+    "openai",
+    "chatgpt",
+    "llm",
+    "terminal",
+    "async",
+    "openai-compatible",
+    "developer-tools",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+
+# Deliberately a single runtime dependency. The TypeScript half of this project
+# ships zero-dep; Python cannot match that (the stdlib has no async HTTP client
+# worth streaming SSE over), so the budget is exactly one well-audited library.
+dependencies = ["httpx>=0.27"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6", "mypy>=1.11"]
+
+[project.urls]
+Homepage = "https://github.com/hispeedtransmission/fibonacci-code"
+Repository = "https://github.com/hispeedtransmission/fibonacci-code"
+Issues = "https://github.com/hispeedtransmission/fibonacci-code/issues"
+Changelog = "https://github.com/hispeedtransmission/fibonacci-code/releases"
+
+[project.scripts]
+fib = "fibonacci.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fibonacci"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/fibonacci", "tests", "README.md", "LICENSE", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+# UP006/UP035 would rewrite typing.Dict -> dict in runtime positions, which the
+# 3.9 floor does not always allow; annotations are already future-imported.
+ignore = ["UP006", "UP035", "UP038"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_unreachable = true
+files = ["src/fibonacci"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
