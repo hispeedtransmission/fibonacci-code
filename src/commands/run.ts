@@ -141,44 +141,57 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
   process.on('SIGINT', onSigint);
 
   const spinner = new Spinner();
-  let wroteText = false;
-  let sawReasoning = false;
+
+  /**
+   * True when the cursor is parked mid-row because we streamed text without a
+   * trailing newline. Anything that writes to the terminal next — a tool line,
+   * a diff, the usage footer — must close the row first, or it lands on top of
+   * the answer.
+   */
+  let midLine = false;
+  const closeLine = () => {
+    if (midLine) {
+      out('\n');
+      midLine = false;
+    }
+  };
 
   try {
     if (!quiet) spinner.start('thinking');
 
     for await (const event of agent.send(prompt, controller.signal)) {
       switch (event.type) {
-        case 'text_delta':
-          if (!wroteText) {
-            spinner.stop();
-            wroteText = true;
-          }
-          out(event.text ?? '');
+        case 'text_delta': {
+          const text = event.text ?? '';
+          if (text === '') break;
+          spinner.stop(); // no-op unless the spinner still owns the row
+          out(text);
+          midLine = !text.endsWith('\n');
           break;
+        }
 
         case 'reasoning_delta':
-          if (!wroteText && !quiet) {
-            sawReasoning = true;
-            spinner.update(firstLine(event.text ?? '') || 'thinking');
-          }
+          // Only meaningful while the spinner is live; once prose is streaming
+          // the label has nowhere to go.
+          if (!quiet) spinner.update(firstLine(event.text ?? '') || 'thinking');
           break;
 
         case 'tool_start':
-          // Deliberately silent. The line is printed once, on completion, with
-          // its real status — printing on start too would double every entry in
-          // piped output, where there is no cursor to overwrite.
-          if (!quiet && event.tool) spinner.update(event.tool.summary);
+          // Deliberately prints nothing. The line is emitted once, on
+          // completion, with its real status — printing on start too would
+          // double every entry in piped output, where there is no cursor to
+          // overwrite.
+          if (!quiet) spinner.update(event.tool?.summary ?? 'working');
           break;
 
         case 'tool_end':
           spinner.stop();
+          closeLine();
           if (!quiet && event.tool) {
             err(`${toolLine({ summary: event.tool.summary, status: event.tool.ok ? 'ok' : 'error' })}\n`);
             if (event.tool.display) err(`${diffLines(event.tool.display)}\n`);
           }
           if (!quiet) spinner.start('thinking');
-          wroteText = false;
           break;
 
         case 'usage':
@@ -190,8 +203,9 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
 
         case 'limit_reached':
           spinner.stop();
+          closeLine();
           err(
-            `\n${Style.yellow('!')} Stopped after ${event.turn} turns without finishing. ` +
+            `${Style.yellow('!')} Stopped after ${event.turn} turns without finishing. ` +
               `${Style.dim('Raise the cap with --max-turns, or narrow the request.')}\n`,
           );
           break;
@@ -199,16 +213,12 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
     }
 
     spinner.stop();
-    if (!process.stdout.write('')) {
-      // no-op; keeps the write path uniform
-    }
-    out('\n');
+    closeLine();
 
     const usage = agent.usage;
     if (!quiet && (usage.inputTokens > 0 || usage.outputTokens > 0)) {
       err(`${Style.dim(formatUsage(usage))}\n`);
     }
-    void sawReasoning;
     return ExitCode.OK;
   } catch (e) {
     spinner.stop();

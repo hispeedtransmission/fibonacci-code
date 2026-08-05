@@ -260,21 +260,46 @@ export class Spinner {
     this.timer.unref();
   }
 
-  update(text: string): void {
-    this.text = text;
-    if (this.enabled) this.draw();
+  /** True while the spinner owns the current terminal row. */
+  get running(): boolean {
+    return this.timer !== undefined;
   }
 
+  /**
+   * Change the label. Same ownership rule as stop(): redrawing when the
+   * spinner is not running would erase a row it does not own.
+   */
+  update(text: string): void {
+    this.text = text;
+    if (this.enabled && this.running) this.draw();
+  }
+
+  /**
+   * Stop, and erase the spinner's line ONLY if the spinner still owns it.
+   *
+   * This guard is load-bearing. Callers legitimately invoke stop() more than
+   * once — on the first text delta, at end of turn, and again in a `finally` —
+   * and by the later calls the spinner is long dead while the cursor sits
+   * mid-row inside text the caller has since written to stdout. An
+   * unconditional `eraseLine()` there wipes the last visual row of the
+   * assistant's answer, truncating it mid-word.
+   *
+   * Invisible off-TTY, because the spinner is a no-op there: piped output was
+   * always intact, which is precisely what made this hard to catch in tests.
+   */
   stop(finalLine?: string): void {
-    if (this.timer !== undefined) {
+    const ownedTheLine = this.timer !== undefined;
+    if (ownedTheLine) {
       clearInterval(this.timer);
       this.timer = undefined;
     }
     if (!this.enabled) return;
 
-    process.stderr.write(`${eraseLine()}\r`);
-    process.stderr.write(showCursor());
-    cursorHiddenByASpinner = false;
+    if (ownedTheLine) process.stderr.write(`${eraseLine()}\r`);
+    if (cursorHiddenByASpinner) {
+      process.stderr.write(showCursor());
+      cursorHiddenByASpinner = false;
+    }
     if (finalLine !== undefined) process.stderr.write(`${finalLine}\n`);
   }
 
