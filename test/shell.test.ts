@@ -29,7 +29,7 @@ test('runCommand never spawns work when its signal is already aborted', async ()
   }
 });
 
-test('shell termination by signal is reported as an error', async () => {
+test('shell termination by signal is reported as an error', { skip: process.platform === 'win32' }, async () => {
   const controller = new AbortController();
   const outcome = await bashTool.run(
     { command: 'kill -TERM $$' },

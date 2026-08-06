@@ -120,7 +120,7 @@ describe('responsive terminal rendering', () => {
   });
 
   test('interaction vocabulary uses the branded instrument labels', () => {
-    assert.equal(stripAnsi(brandPrompt()), 'YOU › ');
+    assert.equal(stripAnsi(brandPrompt()), supportsUnicode() ? 'YOU › ' : 'YOU > ');
     assert.match(stripAnsi(toolLine({ summary: 'read source', status: 'running' })), /TRACE/);
     assert.match(stripAnsi(toolLine({ summary: 'read source', status: 'ok' })), /PASS/);
     assert.match(stripAnsi(toolLine({ summary: 'read source', status: 'error' })), /FAULT/);
