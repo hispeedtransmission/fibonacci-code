@@ -1,0 +1,19 @@
+{
+  "name": "fibonacci",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "build": "pnpm build:core && pnpm --filter @fibonacci/cli build",
+    "build:core": "cargo build --release -p fibonacci-core",
+    "build:dev": "pnpm build:core:dev && pnpm --filter @fibonacci/cli build:dev",
+    "check": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && cargo build --release -p fibonacci-core && pnpm --filter @fibonacci/cli check",
+    "dev": "pnpm build:core:dev && pnpm --filter @fibonacci/cli dev --",
+    "build:core:dev": "cargo build -p fibonacci-core",
+    "doctor": "pnpm --filter @fibonacci/cli doctor",
+    "package": "pnpm build && node scripts/package.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
+    "smoke:core": "node scripts/smoke-core.mjs",
+    "showcase": "pnpm --filter @fibonacci/cli showcase"
+  }
+}

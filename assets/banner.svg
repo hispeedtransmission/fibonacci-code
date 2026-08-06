@@ -1,51 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-label="Fibonacci — a terminal coding agent on your own subscription">
-  <title>Fibonacci — a terminal coding agent on your own subscription</title>
-  <defs>
-    <linearGradient id="bgGold" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0%" stop-color="#C97B29"/>
-      <stop offset="55%" stop-color="#E9A23B"/>
-      <stop offset="100%" stop-color="#F5C46B"/>
-    </linearGradient>
-    <linearGradient id="bgFade" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#17130F"/>
-      <stop offset="100%" stop-color="#0E0C0A"/>
-    </linearGradient>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-labelledby="title desc">
+  <title id="title">Fibonacci — a coding-agent instrument</title>
+  <desc id="desc">A white modular Fibonacci F with an orange verification cell on a phthalo-green field.</desc>
+  <rect width="1200" height="340" fill="#034F3B"/>
+  <path d="M0 286H1200V340H0Z" fill="#10120F"/>
+  <path d="M0 0H1200V8H0Z" fill="#FF4F1F"/>
 
-  <rect width="1200" height="340" rx="16" fill="url(#bgFade)"/>
-  <rect x="0.5" y="0.5" width="1199" height="339" rx="16" fill="none" stroke="#E9A23B" stroke-opacity="0.22"/>
-
-  <!-- Spiral mark: 34x21 units scaled to 260 wide, inset left. -->
-  <g transform="translate(78 62) scale(6.1)">
-    <g fill="none" stroke="#E9A23B" stroke-opacity="0.13" stroke-width="0.13">
-      <rect x="0"  y="0"  width="21" height="21"/>
-      <rect x="21" y="0"  width="13" height="13"/>
-      <rect x="26" y="13" width="8"  height="8"/>
-      <rect x="21" y="16" width="5"  height="5"/>
-      <rect x="21" y="13" width="3"  height="3"/>
-      <rect x="24" y="13" width="2"  height="2"/>
-    </g>
-    <path
-      d="M 25 16 A 1 1 0 0 1 26 15 A 2 2 0 0 1 24 13 A 3 3 0 0 1 21 16 A 5 5 0 0 1 26 21 A 8 8 0 0 1 34 13 A 13 13 0 0 1 21 0 A 21 21 0 0 1 0 21"
-      fill="none" stroke="url(#bgGold)" stroke-width="0.95"
-      stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="25" cy="16" r="0.6" fill="#F5C46B"/>
+  <!-- Mosaic F: square cells and diagonal terminal cuts. -->
+  <g transform="translate(66 49) scale(.8)" fill="#E8DFCA">
+    <path d="M20 20H68V68H4V44Z"/>
+    <rect x="72" y="20" width="48" height="48"/>
+    <rect x="124" y="20" width="48" height="48"/>
+    <path d="M176 20H220L244 44V68H176Z"/>
+    <rect x="4" y="72" width="48" height="48"/>
+    <rect x="56" y="72" width="48" height="48"/>
+    <path d="M108 72H156L180 96L156 120H108Z"/>
+    <rect x="4" y="124" width="48" height="48"/>
+    <rect x="4" y="176" width="48" height="48" fill="#FF4F1F"/>
   </g>
 
   <g font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace">
-    <text x="540" y="132" font-size="72" font-weight="600" fill="#F2EDE4" letter-spacing="-1.5">fibonacci</text>
-    <text x="540" y="184" font-size="25" fill="#E9A23B" letter-spacing="0.4">a terminal coding agent</text>
-    <text x="540" y="222" font-size="21" fill="#8A8073" letter-spacing="0.2">on your own ChatGPT subscription — or any OpenAI-compatible endpoint</text>
-
-    <g font-size="19" fill="#6F675C">
-      <text x="540" y="278">$</text>
-      <text x="562" y="278" fill="#C3BAAB">npm i -g fibonacci-code</text>
-      <text x="820" y="278">·</text>
-      <text x="844" y="278" fill="#C3BAAB">pip install fibonacci-code</text>
-    </g>
-  </g>
-
-  <g fill="none" stroke="#E9A23B" stroke-opacity="0.30">
-    <path d="M540 246 H1122" stroke-width="1"/>
+    <text x="354" y="130" font-size="78" font-weight="800" fill="#E8DFCA" letter-spacing="-4">FIBONACCI</text>
+    <text x="359" y="178" font-size="23" font-weight="600" fill="#B8E0CA" letter-spacing="1">CODING-AGENT INSTRUMENT</text>
+    <path d="M359 210H1128" stroke="#E8DFCA" stroke-opacity=".28"/>
+    <text x="359" y="248" font-size="19" fill="#E8DFCA">01 · 01 · 02 · 03 · 05 · 08 · 13</text>
+    <text x="68" y="320" font-size="15" fill="#B8E0CA" letter-spacing=".8">PROOF COMPOUNDS.</text>
+    <text x="963" y="320" font-size="15" fill="#E8DFCA">fibonacci-code</text>
   </g>
 </svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" role="img" aria-labelledby="title desc">
+  <title id="title">Fibonacci Mosaic F proposal</title>
+  <desc id="desc">A modular Fibonacci F assembled from square cells and diagonal terminal cuts, with one orange verification cell.</desc>
+  <g fill="#066A4F">
+    <path d="M20 20H68V68H4V44Z"/>
+    <rect x="72" y="20" width="48" height="48"/>
+    <rect x="124" y="20" width="48" height="48"/>
+    <path d="M176 20H220L244 44V68H176Z"/>
+    <rect x="4" y="72" width="48" height="48"/>
+    <rect x="56" y="72" width="48" height="48"/>
+    <path d="M108 72H156L180 96L156 120H108Z"/>
+    <rect x="4" y="124" width="48" height="48"/>
+    <path d="M4 176H52V220L28 244H4Z"/>
+  </g>
+  <rect x="4" y="176" width="48" height="48" fill="#EF5B2A"/>
+</svg>

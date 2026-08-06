@@ -7,12 +7,12 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/fibonacci-code"><img alt="npm" src="https://img.shields.io/npm/v/fibonacci-code?color=E9A23B&labelColor=17130F&logo=npm&logoColor=E9A23B"></a>
-  <a href="https://pypi.org/project/fibonacci-code/"><img alt="PyPI" src="https://img.shields.io/pypi/v/fibonacci-code?color=E9A23B&labelColor=17130F&logo=pypi&logoColor=E9A23B"></a>
-  <a href="#requirements"><img alt="node" src="https://img.shields.io/node/v/fibonacci-code?color=E9A23B&labelColor=17130F&logo=node.js&logoColor=E9A23B"></a>
+  <a href="https://www.npmjs.com/package/fibonacci-code"><img alt="npm" src="https://img.shields.io/npm/v/fibonacci-code?color=FF4F1F&labelColor=034F3B&logo=npm&logoColor=E8DFCA"></a>
+  <a href="https://pypi.org/project/fibonacci-code/"><img alt="PyPI" src="https://img.shields.io/pypi/v/fibonacci-code?color=FF4F1F&labelColor=034F3B&logo=pypi&logoColor=E8DFCA"></a>
+  <a href="#requirements"><img alt="node" src="https://img.shields.io/node/v/fibonacci-code?color=FF4F1F&labelColor=034F3B&logo=node.js&logoColor=E8DFCA"></a>
   <a href="https://github.com/hispeedtransmission/fibonacci-code/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/hispeedtransmission/fibonacci-code/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-E9A23B?labelColor=17130F"></a>
-  <img alt="dependencies" src="https://img.shields.io/badge/runtime%20deps-0-E9A23B?labelColor=17130F">
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-FF4F1F?labelColor=034F3B"></a>
+  <img alt="dependencies" src="https://img.shields.io/badge/runtime%20deps-0-FF4F1F?labelColor=034F3B">
 </p>
 
 ---
@@ -20,6 +20,29 @@
 **Fibonacci is a coding agent that lives in your terminal.** It reads your files, edits them, runs your tests, and reports back — driven either by the ChatGPT subscription you already pay for, or by any OpenAI-compatible endpoint you point it at.
 
 It ships with **zero runtime dependencies**. The install is the Node runtime you already trust and nothing else.
+
+## One repository, two execution paths
+
+This repository deliberately preserves both Fibonacci implementations:
+
+- **TypeScript agent (`src/`)** — the production, zero-runtime-dependency CLI and reusable agent library published as `fibonacci-code`.
+- **Rust + Ink harness (`harness/`)** — the low-latency native core, streamed JSONL protocol, and React/Ink terminal instrument. It also includes `fibonacci github login|status` for shared GitHub device-flow authentication.
+- **Python SDK (`python/`)** — the typed async SDK and one-shot Python CLI.
+
+Nothing was replaced to make room for the native path. The root TypeScript agent, the Rust core, the Ink TypeScript UI, and the Python SDK remain independently testable. The harness remains private and is run from its workspace, avoiding a global `fibonacci` binary collision until capability parity is explicit.
+
+```bash
+# Production TypeScript agent
+npm ci && npm test && npm run build
+
+# Native Rust + Ink harness
+cd harness
+pnpm install --frozen-lockfile
+pnpm check
+pnpm dev
+```
+
+The identity source of truth lives in [`assets/brand/lockdown/Fibonacci Brand Lockdown.html`](assets/brand/lockdown/Fibonacci%20Brand%20Lockdown.html): Slab for the smallest production mark, Mosaic for distinctive brand imagery, Recursive for the type system, and Evidence Ledger for public-facing composition.
 
 ```console
 $ fib "add retry logic to the fetch helper"

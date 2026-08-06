@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 220" role="img" aria-labelledby="title desc">
+  <title id="title">Fibonacci wordmark study in Recursive</title>
+  <desc id="desc">Typeset study only. Uppercase Fibonacci set in the Recursive variable family.</desc>
+  <style>@import url('https://fonts.googleapis.com/css2?family=Recursive:CASL,CRSV,MONO,slnt,wght@0,0,0,0,860&amp;display=swap');</style>
+  <rect width="1220" height="220" fill="#E8DFCA"/>
+  <text x="54" y="158" fill="#10120F" font-family="Recursive, Arial Narrow, sans-serif" font-size="148" font-weight="860" letter-spacing="-8">FIBONACCI</text>
+  <rect x="1124" y="48" width="24" height="24" fill="#FF4F1F"/>
+</svg>

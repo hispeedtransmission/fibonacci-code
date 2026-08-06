@@ -75,6 +75,39 @@ jobs:
             && { echo "::error::leaked a stack trace to the user"; exit 1; } || true
           echo "unauthenticated path: exits $rc with an actionable message"
 
+  harness:
+    name: native Rust + Ink harness
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: harness
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.20.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: harness/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: harness
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
   version-lockstep:
     name: version lockstep
     runs-on: ubuntu-latest

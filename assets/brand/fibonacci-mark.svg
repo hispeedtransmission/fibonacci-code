@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" role="img" aria-labelledby="title desc">
+  <title id="title">Fibonacci Recurrence F — Slab</title>
+  <desc id="desc">The canonical Fibonacci Recurrence F, built from a thirteen-unit field with a verified orange proof cell.</desc>
+  <path d="M20 0H240L260 20V60H60V100H160V140L140 160H60V240L40 260H0V20Z" fill="#066A4F"/>
+  <rect x="158" y="90" width="20" height="20" fill="#EF5B2A"/>
+</svg>

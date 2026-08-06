@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 220" role="img" aria-labelledby="title desc">
+  <title id="title">Fibonacci wordmark study in IBM Plex Sans Condensed</title>
+  <desc id="desc">Typeset study only. Uppercase Fibonacci set in IBM Plex Sans Condensed.</desc>
+  <style>@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@700&amp;display=swap');</style>
+  <rect width="1220" height="220" fill="#E8DFCA"/>
+  <text x="54" y="158" fill="#10120F" font-family="IBM Plex Sans Condensed, Arial Narrow, sans-serif" font-size="150" font-weight="700" letter-spacing="7">FIBONACCI</text>
+  <rect x="1124" y="48" width="24" height="24" fill="#FF4F1F"/>
+</svg>

@@ -55,7 +55,12 @@
     "test": "node --test --experimental-strip-types \"test/**/*.test.ts\"",
     "lint": "npm run typecheck",
     "prepublishOnly": "npm run clean && npm run build && npm run typecheck",
-    "dev": "node --experimental-strip-types src/cli.ts"
+    "dev": "node --experimental-strip-types src/cli.ts",
+    "harness:install": "pnpm --dir harness install --frozen-lockfile",
+    "harness:check": "pnpm --dir harness check",
+    "harness:build": "pnpm --dir harness build",
+    "harness:dev": "pnpm --dir harness dev --",
+    "harness:doctor": "pnpm --dir harness doctor"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

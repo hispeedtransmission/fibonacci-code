@@ -1,0 +1,13 @@
+[workspace]
+members = ["crates/fibonacci-core"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "UNLICENSED"
+rust-version = "1.89"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = true
