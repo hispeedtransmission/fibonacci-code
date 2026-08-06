@@ -1,9 +1,44 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { labeledPanel, panel, spinnerLabel, statusPanel, wrapText } from '../src/ui/render.ts';
-import { stripAnsi, visibleWidth } from '../src/ui/ansi.ts';
+import {
+  banner,
+  brandPrompt,
+  foldedFMark,
+  labeledPanel,
+  panel,
+  spinnerLabel,
+  statusPanel,
+  toolLine,
+  wrapText,
+} from '../src/ui/render.ts';
+import { sanitizeInline, stripAnsi, visibleWidth } from '../src/ui/ansi.ts';
 
 describe('responsive terminal rendering', () => {
+  const bannerOptions = {
+    cwd: '/Users/test/Developer/fibonacci-code',
+    model: 'gpt-5.6-sol',
+    provider: 'ChatGPT subscription',
+    approval: 'suggest',
+    version: '0.1.0',
+  };
+
+  test('branded banner carries the folded F, instrument identity, and sequence rail', () => {
+    const rendered = stripAnsi(banner(bannerOptions, 80));
+
+    assert.match(rendered, /FIBONACCI/);
+    assert.match(rendered, /FBNC \/ AGENT INSTRUMENT/);
+    assert.match(rendered, /01·01·02·03·05·08·13/);
+    for (const line of foldedFMark().split('\n')) assert.ok(rendered.includes(line.trimEnd()), rendered);
+    assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= 80), rendered);
+  });
+
+  test('brand chrome falls back cleanly on narrow terminals', () => {
+    for (const columns of [8, 12, 19, 20, 23, 30]) {
+      const rendered = stripAnsi(banner(bannerOptions, columns));
+      assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= columns), `${columns}:\n${rendered}`);
+    }
+  });
+
   test('hard-wraps a single long token instead of overflowing', () => {
     assert.equal(wrapText('abcdefghijkl', 5), 'abcde\nfghij\nkl');
   });
@@ -19,6 +54,13 @@ describe('responsive terminal rendering', () => {
     assert.ok(lines[0]?.includes('Details'));
     assert.ok(lines.every((line) => visibleWidth(line) <= 30), rendered);
     assert.ok(lines.slice(1, -1).every((line) => /^[│|].*[│|]$/.test(line)), rendered);
+  });
+
+  test('panels use a compact unboxed fallback below twenty columns', () => {
+    for (const columns of [6, 10, 19]) {
+      const rendered = stripAnsi(panel('FBNC / DETAILS', ['abcdefghijklmnop', 'second row'], columns));
+      assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= columns), `${columns}:\n${rendered}`);
+    }
   });
 
   test('labeled panels use hanging indentation for wrapped values', () => {
@@ -45,10 +87,18 @@ describe('responsive terminal rendering', () => {
       42,
     );
 
+    assert.match(stripAnsi(rendered), /FBNC \/ SESSION/);
     for (const field of ['MODEL', 'PROVIDER', 'APPROVAL', 'WORKSPACE', 'BRANCH', 'USAGE']) {
       assert.match(stripAnsi(rendered), new RegExp(field));
     }
     assert.ok(stripAnsi(rendered).split('\n').every((line) => visibleWidth(line) <= 42), rendered);
+  });
+
+  test('interaction vocabulary uses the branded instrument labels', () => {
+    assert.equal(stripAnsi(brandPrompt()), 'YOU › ');
+    assert.match(stripAnsi(toolLine({ summary: 'read source', status: 'running' })), /TRACE/);
+    assert.match(stripAnsi(toolLine({ summary: 'read source', status: 'ok' })), /PASS/);
+    assert.match(stripAnsi(toolLine({ summary: 'read source', status: 'error' })), /FAULT/);
   });
 
   test('spinner labels are one sanitized row bounded to terminal width', () => {
@@ -64,6 +114,12 @@ describe('responsive terminal rendering', () => {
     assert.equal(visibleWidth('👩‍💻'), 2);
     assert.equal(visibleWidth('\x1b]8;;https://example.com\x07link\x1b]8;;\x07'), 4);
     assert.equal(visibleWidth('\x1b[?25ltext\x1b[?25h'), 4);
+  });
+
+  test('sanitizes terminal control injection from inline provider text', () => {
+    const sanitized = sanitizeInline('model\nname\x1b]52;c;payload\x07\x1b[?25l');
+    assert.equal(sanitized, 'model name');
+    assert.equal(sanitized.includes('\x1b'), false);
   });
 
   test('wrapping never leaks ANSI styles or splits joined emoji', () => {

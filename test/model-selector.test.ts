@@ -14,10 +14,17 @@ describe('model selector', () => {
     const rendered = modelMenu(models, 'gpt-5.6-sol', 38);
     const lines = stripAnsi(rendered).split('\n');
 
-    assert.match(lines[0] ?? '', /Select a model/);
+    assert.match(lines[0] ?? '', /FBNC \/ MODEL INDEX.*Select a model/);
     assert.ok(lines.some((line) => /1.*gpt-5\.6-sol.*current/.test(line)));
     assert.ok(lines.some((line) => /2.*qwen3-coder/.test(line)));
     assert.ok(lines.every((line) => visibleWidth(line) <= 38), rendered);
+  });
+
+  test('stays width-safe in extremely narrow terminals', () => {
+    for (const columns of [1, 3, 6, 10, 19]) {
+      const rendered = stripAnsi(modelMenu(models, 'gpt-5.6-sol', columns));
+      assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= columns), `${columns}:\n${rendered}`);
+    }
   });
 
   test('resolves a number, exact id, empty current selection, and cancel', () => {

@@ -1,6 +1,6 @@
 import type { ModelInfo, Provider } from '../providers/types.ts';
 import { FibonacciError } from '../errors.ts';
-import { Style, supportsUnicode, visibleWidth } from './ansi.ts';
+import { sanitizeInline, Style, supportsUnicode, visibleWidth } from './ansi.ts';
 
 function truncateRight(text: string, width: number): string {
   if (visibleWidth(text) <= width) return text;
@@ -19,15 +19,24 @@ function truncateRight(text: string, width: number): string {
 
 /** Render a compact, responsive menu suitable for stderr in an interactive REPL. */
 export function modelMenu(models: ModelInfo[], current: string, terminalColumns: number): string {
-  const width = Math.max(20, terminalColumns);
-  const lines = [Style.bold(truncateRight('Select a model', width))];
+  const width = Math.max(1, terminalColumns);
+  const lines = [Style.bold(truncateRight('FBNC / MODEL INDEX · Select a model', width))];
 
   for (const [index, model] of models.entries()) {
+    const safeId = sanitizeInline(model.id);
     const marker = model.id === current ? Style.green(supportsUnicode() ? '●' : '*') : ' ';
-    const suffix = model.id === current ? '  current' : '';
+    if (width < 12) {
+      const rawPrefix = `${index + 1}${marker} `;
+      const prefix = truncateRight(rawPrefix, width);
+      const remaining = width - visibleWidth(prefix);
+      lines.push(remaining > 0 ? `${prefix}${truncateRight(safeId, remaining)}` : prefix);
+      continue;
+    }
+
+    const suffix = model.id === current && width >= 24 ? '  current' : '';
     const prefix = `  ${index + 1} ${marker} `;
-    const idWidth = Math.max(4, width - visibleWidth(prefix) - visibleWidth(suffix));
-    lines.push(`${prefix}${truncateRight(model.id, idWidth)}${Style.dim(suffix)}`);
+    const idWidth = Math.max(1, width - visibleWidth(prefix) - visibleWidth(suffix));
+    lines.push(`${prefix}${truncateRight(safeId, idWidth)}${Style.dim(suffix)}`);
   }
 
   lines.push(Style.dim(truncateRight('Enter a number or model id · q to cancel', width)));

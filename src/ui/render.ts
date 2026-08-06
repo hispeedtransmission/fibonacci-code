@@ -15,6 +15,7 @@
 import { homedir } from 'node:os';
 import {
   Style,
+  sanitizeInline,
   stripAnsi,
   styleCode,
   supportsUnicode,
@@ -24,7 +25,9 @@ import {
   eraseLine,
 } from './ansi.ts';
 
-const BRAND_COLOR = '38;5;214'; // warm amber/gold; see ansi.ts module comment on why no 16-colour fallback is needed
+const BRAND_COLOR = '38;2;12;155;114'; // PG7 phthalo green from the Fibonacci identity system
+const BRAND_ORANGE = '38;2;239;91;42';
+const SEQUENCE_RAIL = '01·01·02·03·05·08·13';
 
 const MIN_BOX_WIDTH = 24;
 const MAX_BOX_WIDTH = 72;
@@ -122,56 +125,90 @@ function truncateLeft(s: string, width: number): string {
   return ellipsis + kept;
 }
 
-export function banner(opts: {
-  cwd: string;
-  model: string;
-  provider: string;
-  approval: string;
-  version: string;
-}): string {
-  const chars = boxChars();
-  const boxWidth = Math.max(MIN_BOX_WIDTH, Math.min(MAX_BOX_WIDTH, terminalWidth() - 2));
-  const innerWidth = boxWidth - 4; // border + 1-space pad on each side
+export function foldedFMark(): string {
+  return supportsUnicode() ? '◢██\n██◤\n█  ' : '/FF\nFF\\\nF  ';
+}
 
-  // The name lives in the top border rather than on its own row. This is
-  // chrome printed on every single invocation, so it earns its height: three
-  // lines total, and every character in them is information the user needs.
-  const label = ` fibonacci `;
-  const titleRun = chars.h.repeat(1) + label + chars.h.repeat(Math.max(0, boxWidth - 3 - visibleWidth(label)));
-  const top = chars.tl + colorizeTitleRun(titleRun, label) + chars.tr;
+export function brandPrompt(): string {
+  return `${styleCode(BRAND_ORANGE, Style.bold('YOU'))} ${styleCode(BRAND_COLOR, supportsUnicode() ? '›' : '>')} `;
+}
+
+export function banner(
+  opts: {
+    cwd: string;
+    model: string;
+    provider: string;
+    approval: string;
+    version: string;
+  },
+  columns = terminalWidth(),
+): string {
+  const available = Math.max(1, columns);
+  const home = homedir();
+  const safeCwd = sanitizeInline(opts.cwd);
+  const shownCwd = safeCwd === home ? '~' : safeCwd.startsWith(`${home}/`) ? `~${safeCwd.slice(home.length)}` : safeCwd;
+  const shortProvider = sanitizeInline(opts.provider).replace(/\s*\(.*?\)\s*/, ' ').replace(/\s+—.*$/, '').trim();
+  const meta = [sanitizeInline(opts.model), shortProvider, sanitizeInline(opts.approval).toUpperCase()]
+    .filter((s) => s !== '')
+    .join(' · ');
+
+  // Below twenty columns, borders cost too much information. Keep a compact,
+  // entirely width-safe instrument signature instead.
+  if (available < 20) {
+    return [
+      truncateRight(`${supportsUnicode() ? '◢' : 'F'} FBNC`, available),
+      truncateLeft(shownCwd, available),
+      truncateRight(meta, available),
+    ].join('\n');
+  }
+
+  const chars = boxChars();
+  const boxWidth = Math.min(MAX_BOX_WIDTH, Math.max(20, available - 2));
+  const innerWidth = boxWidth - 4;
+  const label = available >= 52 ? ' FBNC / AGENT INSTRUMENT ' : ` ${supportsUnicode() ? '◢' : 'F'} FIBONACCI `;
+  const shownLabel = truncateRight(label, boxWidth - 4);
+  const titleRun = chars.h + shownLabel + chars.h.repeat(Math.max(0, boxWidth - 3 - visibleWidth(shownLabel)));
+  const top = chars.tl + colorizeTitleRun(titleRun, shownLabel) + chars.tr;
   const bottom = chars.bl + chars.h.repeat(boxWidth - 2) + chars.br;
   const rule = (content: string) => `${chars.v} ${padVisible(content, innerWidth)} ${chars.v}`;
 
-  // Collapse $HOME to `~`: the informative part of a path is its tail, and the
-  // home prefix is the same on every line the user will ever read.
-  const home = homedir();
-  const shownCwd = opts.cwd === home ? '~' : opts.cwd.startsWith(`${home}/`) ? `~${opts.cwd.slice(home.length)}` : opts.cwd;
+  if (available >= 52) {
+    const mark = foldedFMark().split('\n');
+    const markWidth = Math.max(...mark.map((line) => visibleWidth(line)));
+    const contentWidth = innerWidth - markWidth - 2;
+    const markLine = (index: number) => {
+      const raw = (mark[index] ?? '').padEnd(markWidth);
+      return index === 2 ? styleCode(BRAND_ORANGE, raw) : styleCode(BRAND_COLOR, raw);
+    };
+    const identity = `${Style.bold('FIBONACCI')}  ${styleCode(BRAND_COLOR, SEQUENCE_RAIL)}  ${Style.dim(`v${opts.version}`)}`;
+    return [
+      top,
+      rule(`${markLine(0)}  ${truncateRight(identity, contentWidth)}`),
+      rule(`${markLine(1)}  ${Style.bold(truncateLeft(shownCwd, contentWidth))}`),
+      rule(`${markLine(2)}  ${Style.dim(truncateRight(meta, contentWidth))}`),
+      bottom,
+    ].join('\n');
+  }
 
-  // Strip the parenthetical account detail; `fib auth status` is where that
-  // belongs. Here we want the shortest phrase that says which account pays.
-  const shortProvider = opts.provider.replace(/\s*\(.*?\)\s*/, ' ').replace(/\s+—.*$/, '').trim();
-
-  const meta = [opts.model, shortProvider, opts.approval].filter((s) => s !== '').join(' · ');
-
-  // Try one line. Only if the path and the metadata genuinely cannot share a
-  // row do we stack — and once stacked, the path gets the whole width back
-  // rather than keeping the cramped budget that failed.
-  const shared = truncateLeft(shownCwd, Math.max(12, innerWidth - visibleWidth(meta) - 3));
-  const lines =
-    visibleWidth(`${shared}   ${meta}`) <= innerWidth && visibleWidth(shownCwd) === visibleWidth(shared)
-      ? [top, rule(`${Style.bold(shared)}   ${Style.dim(meta)}`), bottom]
-      : [
-          top,
-          rule(Style.bold(truncateLeft(shownCwd, innerWidth))),
-          rule(Style.dim(truncateRight(meta, innerWidth))),
-          bottom,
-        ];
-
-  return lines.join('\n');
+  return [
+    top,
+    rule(Style.bold(truncateLeft(shownCwd, innerWidth))),
+    rule(Style.dim(truncateRight(meta, innerWidth))),
+    bottom,
+  ].join('\n');
 }
 
 /** A responsive bordered panel. Input rows are plain text; styling is applied here. */
 export function panel(title: string, rows: string[], columns = terminalWidth()): string {
+  if (columns < 20) {
+    const width = Math.max(1, columns);
+    const titleLines = wrapText(stripAnsi(title), width)
+      .split('\n')
+      .map((line) => styleCode(BRAND_COLOR, Style.bold(line)));
+    const body = rows.flatMap((row) => wrapText(stripAnsi(row), width).split('\n'));
+    return [...titleLines, ...body].join('\n');
+  }
+
   const chars = boxChars();
   const boxWidth = Math.max(20, Math.min(MAX_BOX_WIDTH, columns));
   const innerWidth = boxWidth - 4;
@@ -188,6 +225,8 @@ export function panel(title: string, rows: string[], columns = terminalWidth()):
 }
 
 export function labeledPanel(title: string, entries: ReadonlyArray<readonly [string, string]>, columns = terminalWidth()): string {
+  if (columns < 20) return panel(title, entries.map(([label, value]) => `${label}: ${value}`), columns);
+
   const boxWidth = Math.max(20, Math.min(MAX_BOX_WIDTH, columns));
   const innerWidth = boxWidth - 4;
   const maxLabel = Math.max(0, ...entries.map(([label]) => visibleWidth(label)));
@@ -212,14 +251,14 @@ export function statusPanel(
   columns = terminalWidth(),
 ): string {
   const entries: Array<readonly [string, string]> = [
-    ['MODEL', status.model],
-    ['PROVIDER', status.provider],
-    ['APPROVAL', status.approval],
-    ['WORKSPACE', status.cwd],
-    ...(status.branch ? ([['BRANCH', status.branch]] as const) : []),
-    ['USAGE', status.usage],
+    ['MODEL', sanitizeInline(status.model)],
+    ['PROVIDER', sanitizeInline(status.provider)],
+    ['APPROVAL', sanitizeInline(status.approval)],
+    ['WORKSPACE', sanitizeInline(status.cwd)],
+    ...(status.branch ? ([['BRANCH', sanitizeInline(status.branch)]] as const) : []),
+    ['USAGE', sanitizeInline(status.usage)],
   ];
-  return labeledPanel('session', entries, columns);
+  return labeledPanel('FBNC / SESSION', entries, columns);
 }
 
 /** Brand-colour the word inside the top border, leave the rule itself dim. */
@@ -245,11 +284,19 @@ export function toolLine(opts: {
   detail?: string;
 }): string {
   const glyph = supportsUnicode() ? '●' : '*';
+  const state =
+    opts.status === 'running'
+      ? styleCode(BRAND_COLOR, 'TRACE')
+      : opts.status === 'ok'
+        ? Style.green('PASS')
+        : Style.red('FAULT');
   const bullet =
-    opts.status === 'running' ? Style.cyan(glyph) : opts.status === 'ok' ? Style.green(glyph) : Style.red(glyph);
+    opts.status === 'running' ? styleCode(BRAND_COLOR, glyph) : opts.status === 'ok' ? Style.green(glyph) : Style.red(glyph);
 
-  const label = opts.name ? `${opts.name}  ${opts.summary}` : opts.summary;
-  const base = `  ${bullet} ${label}`;
+  const safeName = opts.name === undefined ? undefined : sanitizeInline(opts.name);
+  const safeSummary = sanitizeInline(opts.summary);
+  const label = safeName ? `${safeName}  ${safeSummary}` : safeSummary;
+  const base = `  ${state} ${bullet} ${label}`;
   return opts.detail ? `${base}\n    ${Style.dim(opts.detail)}` : base;
 }
 
@@ -275,10 +322,7 @@ const SPINNER_INTERVAL_MS = 80;
 
 /** Sanitize untrusted status text and bound it to the spinner's single owned row. */
 export function spinnerLabel(text: string, columns = terminalWidth()): string {
-  // OSC commands end with BEL or ST; CSI commands end with a final byte.
-  const withoutOsc = text.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '');
-  const withoutEscapes = withoutOsc.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
-  const oneLine = withoutEscapes.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const oneLine = sanitizeInline(text);
   return truncateRight(oneLine || 'working', Math.max(1, columns - 4));
 }
 

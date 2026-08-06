@@ -16,6 +16,7 @@ import { fibonacciHome, historyPath } from '../paths.ts';
 import { Style } from '../ui/ansi.ts';
 import {
   banner,
+  brandPrompt,
   diffLines,
   formatUsage,
   labeledPanel,
@@ -280,7 +281,7 @@ async function askApproval(rl: Interface, req: ApprovalRequest): Promise<boolean
 
 function slashHelp(): string {
   return labeledPanel(
-    'commands',
+    'FBNC / COMMAND INDEX',
     [
       ['/help', 'Show this'],
       ['/clear', 'Forget the conversation so far'],
@@ -294,21 +295,28 @@ function slashHelp(): string {
   );
 }
 
+export async function questionOrEof(
+  questioner: { question(prompt: string): Promise<string> },
+  prompt: string,
+): Promise<string | undefined> {
+  try {
+    return await questioner.question(prompt);
+  } catch {
+    return undefined;
+  }
+}
+
 async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOptions): Promise<number> {
   const history = await loadHistory();
-  err(`${Style.dim(wrapText('Type your request. /help for commands, Ctrl-D to exit.', terminalWidth()))}\n\n`);
+  err(`${Style.dim(wrapText('INSTRUMENT READY · /help commands · Ctrl-D exit', terminalWidth()))}\n\n`);
 
   // Seed readline's history so up-arrow works across sessions.
   const rlAny = rl as unknown as { history?: string[] };
   if (Array.isArray(rlAny.history)) rlAny.history = history.slice().reverse();
 
   for (;;) {
-    let line: string;
-    try {
-      line = await rl.question(`${Style.bold(Style.yellow('❯ '))}`);
-    } catch {
-      break; // Ctrl-D closes the interface.
-    }
+    const line = await questionOrEof(rl, brandPrompt());
+    if (line === undefined) break;
 
     const input = line.trim();
     if (input === '') continue;
@@ -371,7 +379,8 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
         }
 
         err(`${modelMenu(models, agent.model, terminalWidth())}\n`);
-        const answer = await rl.question(`${Style.dim(`Model [${agent.model}]: `)}`);
+        const answer = await questionOrEof(rl, `${Style.dim(`Model [${agent.model}]: `)}`);
+        if (answer === undefined) break;
         try {
           const selected = resolveModelChoice(answer, models, agent.model);
           if (selected === undefined) {

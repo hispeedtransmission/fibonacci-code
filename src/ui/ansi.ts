@@ -114,6 +114,14 @@ export function stripAnsi(s: string): string {
   return s.replace(ANSI_PATTERN, '');
 }
 
+/** Remove terminal commands and collapse control characters for single-row UI fields. */
+export function sanitizeInline(s: string): string {
+  return stripAnsi(s)
+    .replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Zero-width or combining code points that occupy a terminal cell but no
 // visible column: combining diacritics, variation selectors, and the
 // zero-width space/joiner/non-joiner family. Not a full Unicode grapheme
