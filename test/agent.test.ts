@@ -285,6 +285,33 @@ describe('Agent loop', () => {
     assert.equal(agent.transcript.length, 4);
   });
 
+  test('setApproval changes the mode used by subsequent tool calls', async () => {
+    let observedApproval = '';
+    const provider = scriptedProvider([
+      [
+        { type: 'item', item: { type: 'tool_call', id: 'c1', name: 'capture', args: '{}' } },
+        { type: 'done', stopReason: 'tool_calls' },
+      ],
+      [{ type: 'done', stopReason: 'stop' }],
+    ]);
+    const capture: Tool = {
+      spec: { name: 'capture', description: 'capture', parameters: { type: 'object' } },
+      summarize: () => 'capture approval',
+      needsApproval: () => false,
+      async run(_args, ctx) {
+        observedApproval = ctx.approval;
+        return { output: 'ok' };
+      },
+    };
+    const agent = new Agent(baseOptions(provider, [capture]));
+
+    agent.setApproval('auto-edit');
+    await drain(agent, 'go');
+
+    assert.equal(agent.approval, 'auto-edit');
+    assert.equal(observedApproval, 'auto-edit');
+  });
+
   test('reset() clears history and usage', async () => {
     const provider = scriptedProvider([
       [

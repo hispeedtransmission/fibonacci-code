@@ -59,12 +59,14 @@ export interface AgentOptions {
 export class Agent {
   readonly #opts: AgentOptions;
   #model: string;
+  #approval: ApprovalMode;
   #items: Item[] = [];
   #totalUsage: Usage = { inputTokens: 0, outputTokens: 0 };
 
   constructor(opts: AgentOptions) {
     this.#opts = opts;
     this.#model = opts.model;
+    this.#approval = opts.approval;
   }
 
   get model(): string {
@@ -76,6 +78,15 @@ export class Agent {
     const next = model.trim();
     if (next === '') throw new FibonacciError('Model id cannot be empty.');
     this.#model = next;
+  }
+
+  get approval(): ApprovalMode {
+    return this.#approval;
+  }
+
+  /** Change how future tool calls are authorized. */
+  setApproval(approval: ApprovalMode): void {
+    this.#approval = approval;
   }
 
   get transcript(): readonly Item[] {
@@ -211,7 +222,7 @@ export class Agent {
 
         const ctx: ToolContext = {
           root: this.#opts.root,
-          approval: this.#opts.approval,
+          approval: this.#approval,
           signal,
           commandTimeout: this.#opts.commandTimeout,
           requestApproval: this.#opts.requestApproval,

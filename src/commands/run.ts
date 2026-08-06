@@ -3,7 +3,7 @@ import { readFile, appendFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import type { ResolvedConfig } from '../config.ts';
+import { APPROVAL_MODES, type ApprovalMode, type ResolvedConfig } from '../config.ts';
 import { ExitCode, CancelledError } from '../errors.ts';
 import { createProvider } from '../providers/index.ts';
 import type { Provider } from '../providers/types.ts';
@@ -16,6 +16,7 @@ import { fibonacciHome, historyPath } from '../paths.ts';
 import { Style } from '../ui/ansi.ts';
 import { banner, diffLines, formatUsage, panel, Spinner, statusPanel, terminalWidth, toolLine, wrapText } from '../ui/render.ts';
 import { modelMenu, resolveModelChoice } from '../ui/model-selector.ts';
+import { completeRepl } from '../ui/completion.ts';
 
 /**
  * The run command: one-shot and interactive.
@@ -85,7 +86,12 @@ export async function runCommand(opts: RunOptions): Promise<number> {
 
   let rl: Interface | undefined;
   const ensureReadline = (): Interface => {
-    rl ??= createInterface({ input: process.stdin, output: process.stderr, terminal: process.stdin.isTTY === true });
+    rl ??= createInterface({
+      input: process.stdin,
+      output: process.stderr,
+      terminal: process.stdin.isTTY === true,
+      completer: completeRepl,
+    });
     return rl;
   };
 
@@ -313,14 +319,15 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
         continue;
       }
       if (cmd === 'status') {
+        const branch = currentBranch(opts.cwd);
         err(
           `${statusPanel(
             {
               model: agent.model,
               provider: provider.label,
-              approval: opts.cfg.approval,
+              approval: agent.approval,
               cwd: opts.cwd,
-              ...(currentBranch(opts.cwd) ? { branch: currentBranch(opts.cwd) } : {}),
+              ...(branch ? { branch } : {}),
               usage: formatUsage(agent.usage),
             },
             terminalWidth(),
@@ -358,7 +365,17 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
         continue;
       }
       if (cmd === 'approval') {
-        err(`${Style.dim(`Approval mode is fixed for the session (${opts.cfg.approval}). Restart with -a <mode>.`)}\n`);
+        const requested = args[0];
+        if (requested === undefined || requested === '') {
+          err(`${Style.dim(`Current approval mode: ${agent.approval}. Choose: ${APPROVAL_MODES.join(' | ')}`)}\n`);
+          continue;
+        }
+        if (!APPROVAL_MODES.includes(requested as ApprovalMode)) {
+          err(`${Style.yellow('!')} Unknown approval mode "${requested}". Choose: ${APPROVAL_MODES.join(' | ')}\n`);
+          continue;
+        }
+        agent.setApproval(requested as ApprovalMode);
+        err(`${Style.green('✓')} Approval mode set to ${Style.bold(agent.approval)} for future tools.\n`);
         continue;
       }
       err(`${Style.dim(`Unknown command /${cmd ?? ''}. Try /help.`)}\n`);
