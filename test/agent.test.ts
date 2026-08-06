@@ -263,6 +263,28 @@ describe('Agent loop', () => {
     assert.equal(results[0]?.type === 'tool_result' ? results[0].id : '', 'orphan');
   });
 
+  test('setModel changes subsequent requests without dropping the transcript', async () => {
+    const provider = scriptedProvider([
+      [
+        { type: 'item', item: { type: 'message', role: 'assistant', content: 'first' } },
+        { type: 'done', stopReason: 'stop' },
+      ],
+      [
+        { type: 'item', item: { type: 'message', role: 'assistant', content: 'second' } },
+        { type: 'done', stopReason: 'stop' },
+      ],
+    ]);
+    const agent = new Agent(baseOptions(provider, []));
+
+    await drain(agent, 'one');
+    agent.setModel('fake-2');
+    await drain(agent, 'two');
+
+    assert.equal(agent.model, 'fake-2');
+    assert.deepEqual(provider.requests.map((request) => request.model), ['fake-1', 'fake-2']);
+    assert.equal(agent.transcript.length, 4);
+  });
+
   test('reset() clears history and usage', async () => {
     const provider = scriptedProvider([
       [

@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import type { ResolvedConfig } from '../config.ts';
 import { ExitCode, CancelledError } from '../errors.ts';
 import { createProvider } from '../providers/index.ts';
+import type { Provider } from '../providers/types.ts';
 import { Agent } from '../agent/loop.ts';
 import { ALL_TOOLS } from '../agent/tools/index.ts';
 import { buildSystemPrompt, PROJECT_DOC_FILES } from '../agent/prompt.ts';
@@ -13,7 +14,8 @@ import type { ApprovalRequest } from '../agent/tools/types.ts';
 import { VERSION } from '../version.ts';
 import { fibonacciHome, historyPath } from '../paths.ts';
 import { Style } from '../ui/ansi.ts';
-import { banner, diffLines, formatUsage, Spinner, toolLine } from '../ui/render.ts';
+import { banner, diffLines, formatUsage, Spinner, terminalWidth, toolLine } from '../ui/render.ts';
+import { modelMenu, resolveModelChoice } from '../ui/model-selector.ts';
 
 /**
  * The run command: one-shot and interactive.
@@ -125,7 +127,7 @@ export async function runCommand(opts: RunOptions): Promise<number> {
     return code;
   }
 
-  return await repl(agent, ensureReadline(), opts, model);
+  return await repl(agent, provider, ensureReadline(), opts);
 }
 
 /**
@@ -262,13 +264,13 @@ async function askApproval(rl: Interface, req: ApprovalRequest): Promise<boolean
 const SLASH_HELP = `${Style.bold('Slash commands')}
   /help            Show this
   /clear           Forget the conversation so far
-  /model <id>      Not persisted — restart with -m to change model
+  /model [id]      Choose a model for future turns
   /usage           Token usage this session
   /approval <m>    suggest | auto-edit | full-auto
   /exit, /quit     Leave  (Ctrl-D also works)
 `;
 
-async function repl(agent: Agent, rl: Interface, opts: RunOptions, model: string): Promise<number> {
+async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOptions): Promise<number> {
   const history = await loadHistory();
   err(`${Style.dim('Type your request. /help for commands, Ctrl-D to exit.')}\n\n`);
 
@@ -288,7 +290,7 @@ async function repl(agent: Agent, rl: Interface, opts: RunOptions, model: string
     if (input === '') continue;
 
     if (input.startsWith('/')) {
-      const [cmd] = input.slice(1).split(/\s+/);
+      const [cmd, ...args] = input.slice(1).split(/\s+/);
       if (cmd === 'exit' || cmd === 'quit') break;
       if (cmd === 'help') {
         err(SLASH_HELP);
@@ -304,9 +306,32 @@ async function repl(agent: Agent, rl: Interface, opts: RunOptions, model: string
         continue;
       }
       if (cmd === 'model') {
-        err(
-          `${Style.dim(`Current model: ${model}. Changing model mid-session is not supported — restart with -m <id>.`)}\n`,
-        );
+        const requested = args.join(' ').trim();
+        if (requested !== '') {
+          agent.setModel(requested);
+          err(`${Style.green('✓')} Model set to ${Style.bold(agent.model)} for future turns.\n`);
+          continue;
+        }
+
+        const models = await provider.listModels();
+        if (models.length === 0) {
+          err(`${Style.dim(`No model list is available. Set one explicitly with /model <id>. Current: ${agent.model}`)}\n`);
+          continue;
+        }
+
+        err(`${modelMenu(models, agent.model, terminalWidth())}\n`);
+        const answer = await rl.question(`${Style.dim(`Model [${agent.model}]: `)}`);
+        try {
+          const selected = resolveModelChoice(answer, models, agent.model);
+          if (selected === undefined) {
+            err(`${Style.dim('Model selection cancelled.')}\n`);
+          } else {
+            agent.setModel(selected);
+            err(`${Style.green('✓')} Model set to ${Style.bold(agent.model)} for future turns.\n`);
+          }
+        } catch (error) {
+          err(`${Style.yellow('!')} ${(error as Error).message}\n`);
+        }
         continue;
       }
       if (cmd === 'approval') {

@@ -58,11 +58,24 @@ export interface AgentOptions {
 
 export class Agent {
   readonly #opts: AgentOptions;
+  #model: string;
   #items: Item[] = [];
   #totalUsage: Usage = { inputTokens: 0, outputTokens: 0 };
 
   constructor(opts: AgentOptions) {
     this.#opts = opts;
+    this.#model = opts.model;
+  }
+
+  get model(): string {
+    return this.#model;
+  }
+
+  /** Change the model used by future requests while preserving the transcript. */
+  setModel(model: string): void {
+    const next = model.trim();
+    if (next === '') throw new FibonacciError('Model id cannot be empty.');
+    this.#model = next;
   }
 
   get transcript(): readonly Item[] {
@@ -107,7 +120,7 @@ export class Agent {
       try {
         const stream = this.#opts.provider.stream(
           {
-            model: this.#opts.model,
+            model: this.#model,
             instructions: this.#opts.instructions,
             items: this.#items,
             tools: this.#toolSpecs(),
