@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { panel, statusPanel, wrapText } from '../src/ui/render.ts';
+import { labeledPanel, panel, statusPanel, wrapText } from '../src/ui/render.ts';
 import { stripAnsi, visibleWidth } from '../src/ui/ansi.ts';
 
 describe('responsive terminal rendering', () => {
@@ -19,6 +19,17 @@ describe('responsive terminal rendering', () => {
     assert.ok(lines[0]?.includes('Details'));
     assert.ok(lines.every((line) => visibleWidth(line) <= 30), rendered);
     assert.ok(lines.slice(1, -1).every((line) => /^[│|].*[│|]$/.test(line)), rendered);
+  });
+
+  test('labeled panels use hanging indentation for wrapped values', () => {
+    const rendered = stripAnsi(
+      labeledPanel('commands', [['/model [id]', 'Choose a model for all future turns in this session']], 36),
+    );
+    const body = rendered.split('\n').slice(1, -1);
+
+    assert.match(body[0] ?? '', /\/model \[id\].*Choose a model/);
+    assert.match(body[1] ?? '', /^[│|]\s{14}\S/, rendered);
+    assert.ok(body.every((line) => visibleWidth(line) <= 36), rendered);
   });
 
   test('status HUD exposes the expected session fields and remains responsive', () => {

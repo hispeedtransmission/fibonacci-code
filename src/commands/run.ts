@@ -14,7 +14,17 @@ import type { ApprovalRequest } from '../agent/tools/types.ts';
 import { VERSION } from '../version.ts';
 import { fibonacciHome, historyPath } from '../paths.ts';
 import { Style } from '../ui/ansi.ts';
-import { banner, diffLines, formatUsage, panel, Spinner, statusPanel, terminalWidth, toolLine, wrapText } from '../ui/render.ts';
+import {
+  banner,
+  diffLines,
+  formatUsage,
+  labeledPanel,
+  Spinner,
+  statusPanel,
+  terminalWidth,
+  toolLine,
+  wrapText,
+} from '../ui/render.ts';
 import { modelMenu, resolveModelChoice } from '../ui/model-selector.ts';
 import { completeRepl } from '../ui/completion.ts';
 
@@ -268,16 +278,16 @@ async function askApproval(rl: Interface, req: ApprovalRequest): Promise<boolean
 }
 
 function slashHelp(): string {
-  return panel(
+  return labeledPanel(
     'commands',
     [
-      '/help           Show this',
-      '/clear          Forget the conversation so far',
-      '/model [id]     Choose a model for future turns',
-      '/status         Show the live session HUD',
-      '/usage          Token usage this session',
-      '/approval <m>   suggest | auto-edit | full-auto',
-      '/exit, /quit    Leave (Ctrl-D also works)',
+      ['/help', 'Show this'],
+      ['/clear', 'Forget the conversation so far'],
+      ['/model [id]', 'Choose a model for future turns'],
+      ['/status', 'Show the live session HUD'],
+      ['/usage', 'Token usage this session'],
+      ['/approval <m>', 'suggest | auto-edit | full-auto'],
+      ['/exit, /quit', 'Leave (Ctrl-D also works)'],
     ],
     terminalWidth(),
   );

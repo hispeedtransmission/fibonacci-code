@@ -179,9 +179,24 @@ export function panel(title: string, rows: string[], columns = terminalWidth()):
   const topRun = chars.h + shownLabel + chars.h.repeat(Math.max(0, boxWidth - 3 - visibleWidth(shownLabel)));
   const top = chars.tl + colorizeTitleRun(topRun, shownLabel) + chars.tr;
   const bottom = chars.bl + chars.h.repeat(boxWidth - 2) + chars.br;
-  const body = rows.flatMap((row) => wrapText(row, innerWidth).split('\n'));
+  const body = rows.flatMap((row) =>
+    row.split('\n').flatMap((line) => (visibleWidth(line) <= innerWidth ? [line] : wrapText(line, innerWidth).split('\n'))),
+  );
   const rule = (content: string) => `${chars.v} ${padVisible(content, innerWidth)} ${chars.v}`;
   return [top, ...body.map(rule), bottom].join('\n');
+}
+
+export function labeledPanel(title: string, entries: ReadonlyArray<readonly [string, string]>, columns = terminalWidth()): string {
+  const boxWidth = Math.max(20, Math.min(MAX_BOX_WIDTH, columns));
+  const innerWidth = boxWidth - 4;
+  const maxLabel = Math.max(0, ...entries.map(([label]) => visibleWidth(label)));
+  const labelWidth = Math.min(maxLabel, Math.max(6, Math.floor(innerWidth / 2)));
+  const valueWidth = Math.max(4, innerWidth - labelWidth - 2);
+  const rows = entries.flatMap(([label, value]) => {
+    const valueLines = wrapText(value, valueWidth).split('\n');
+    return valueLines.map((line, index) => `${index === 0 ? label.padEnd(labelWidth) : ' '.repeat(labelWidth)}  ${line}`);
+  });
+  return panel(title, rows, boxWidth);
 }
 
 export function statusPanel(
@@ -195,15 +210,15 @@ export function statusPanel(
   },
   columns = terminalWidth(),
 ): string {
-  const rows = [
-    `MODEL      ${status.model}`,
-    `PROVIDER   ${status.provider}`,
-    `APPROVAL   ${status.approval}`,
-    `WORKSPACE  ${status.cwd}`,
-    ...(status.branch ? [`BRANCH     ${status.branch}`] : []),
-    `USAGE      ${status.usage}`,
+  const entries: Array<readonly [string, string]> = [
+    ['MODEL', status.model],
+    ['PROVIDER', status.provider],
+    ['APPROVAL', status.approval],
+    ['WORKSPACE', status.cwd],
+    ...(status.branch ? ([['BRANCH', status.branch]] as const) : []),
+    ['USAGE', status.usage],
   ];
-  return panel('session', rows, columns);
+  return labeledPanel('session', entries, columns);
 }
 
 /** Brand-colour the word inside the top border, leave the rule itself dim. */
