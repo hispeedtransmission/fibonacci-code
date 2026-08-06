@@ -116,9 +116,12 @@ export function stripAnsi(s: string): string {
   return s.replace(ANSI_PATTERN, '');
 }
 
+const BIDI_CONTROLS = /[\u202a-\u202e\u2066-\u2069]/g;
+
 /** Remove terminal commands and collapse control characters for single-row UI fields. */
 export function sanitizeInline(s: string): string {
   return stripAnsi(s)
+    .replace(BIDI_CONTROLS, '')
     .replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -128,7 +131,7 @@ export function sanitizeInline(s: string): string {
 export function sanitizeMultiline(s: string): string {
   return s
     .split(/\r?\n/)
-    .map((line) => stripAnsi(line).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, ''))
+    .map((line) => stripAnsi(line).replace(BIDI_CONTROLS, '').replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, ''))
     .join('\n');
 }
 

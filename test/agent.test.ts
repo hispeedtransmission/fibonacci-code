@@ -83,6 +83,19 @@ describe('Agent loop', () => {
     assert.equal(agent.transcript.length, 2); // user + assistant
   });
 
+  test('reports no-tool length and refusal completions as incomplete', async () => {
+    for (const stopReason of ['length', 'refusal'] as const) {
+      const provider = scriptedProvider([[
+        { type: 'text_delta', text: 'partial' },
+        { type: 'done', stopReason },
+      ]]);
+      const events = await drain(new Agent(baseOptions(provider, [])), 'go');
+      const incomplete = events.find((event) => event.type === 'incomplete');
+      assert.equal(incomplete?.text, stopReason);
+      assert.equal(events.at(-1)?.type, 'incomplete');
+    }
+  });
+
   test('runs a tool then continues to a second turn', async () => {
     const provider = scriptedProvider([
       [
@@ -283,6 +296,13 @@ describe('Agent loop', () => {
     assert.equal(agent.model, 'fake-2');
     assert.deepEqual(provider.requests.map((request) => request.model), ['fake-1', 'fake-2']);
     assert.equal(agent.transcript.length, 4);
+  });
+
+  test('constructor applies the same model-id validation as setModel', () => {
+    assert.throws(
+      () => new Agent({ ...baseOptions(scriptedProvider([]), []), model: 'unsafe model' }),
+      /cannot contain whitespace/,
+    );
   });
 
   test('setModel rejects an empty id atomically and trims valid ids', () => {

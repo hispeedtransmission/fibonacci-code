@@ -149,8 +149,8 @@ describe('responsive terminal rendering', () => {
   });
 
   test('sanitizes terminal control injection from inline provider text', () => {
-    const sanitized = sanitizeInline('model\nname\x1b]52;c;payload\x07\x1b[?25l');
-    assert.equal(sanitized, 'model name');
+    const sanitized = sanitizeInline('model\nname\x1b]52;c;payload\x07\x1b[?25l\u202Espoof\u2066');
+    assert.equal(sanitized, 'model namespoof');
     assert.equal(sanitized.includes('\x1b'), false);
   });
 

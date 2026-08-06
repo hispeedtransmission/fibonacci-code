@@ -14,6 +14,11 @@ import {
   type ToolOutcome,
 } from './types.ts';
 import type { ApprovalMode } from '../../config.ts';
+import { CancelledError } from '../../errors.ts';
+
+function throwIfCancelled(signal: AbortSignal): void {
+  if (signal.aborted) throw new CancelledError();
+}
 
 /**
  * File tools.
@@ -174,6 +179,7 @@ export const writeTool: Tool = {
       if (!ok) return { output: 'The user declined this write. Ask what they would prefer.', isError: true };
     }
 
+    throwIfCancelled(ctx.signal);
     await atomicWrite(abs, content);
     const { added, removed } = diffStat(patch);
     return {
@@ -254,6 +260,7 @@ export const editTool: Tool = {
       if (!ok) return { output: 'The user declined this edit. Ask what they would prefer.', isError: true };
     }
 
+    throwIfCancelled(ctx.signal);
     await atomicWrite(abs, after);
     const { added, removed } = diffStat(patch);
     return {

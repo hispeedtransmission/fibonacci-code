@@ -36,6 +36,7 @@ export interface AgentEvent {
     | 'tool_end'
     | 'usage'
     | 'turn_end'
+    | 'incomplete'
     | 'limit_reached';
   text?: string;
   turn?: number;
@@ -58,14 +59,14 @@ export interface AgentOptions {
 
 export class Agent {
   readonly #opts: AgentOptions;
-  #model: string;
+  #model = '';
   #approval: ApprovalMode;
   #items: Item[] = [];
   #totalUsage: Usage = { inputTokens: 0, outputTokens: 0 };
 
   constructor(opts: AgentOptions) {
     this.#opts = opts;
-    this.#model = opts.model;
+    this.setModel(opts.model);
     this.#approval = opts.approval;
   }
 
@@ -185,6 +186,10 @@ export class Agent {
       }
 
       if (pendingToolCalls.length === 0) {
+        if (stopReason === 'length' || stopReason === 'refusal') {
+          yield { type: 'incomplete', text: stopReason, turn };
+          return;
+        }
         yield { type: 'turn_end', turn };
         return;
       }
@@ -276,9 +281,10 @@ export class Agent {
 
       yield { type: 'turn_end', turn };
 
-      if (stopReason === 'length') {
+      if (stopReason === 'length' || stopReason === 'refusal') {
         // Another turn would resume mid-thought; better to stop and let the
-        // user decide than to silently produce a truncated result.
+        // user decide than to silently produce a truncated or refused result.
+        yield { type: 'incomplete', text: stopReason, turn };
         return;
       }
     }

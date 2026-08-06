@@ -208,6 +208,9 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
 
   try {
     const cfg = await loadConfig(cli.cwd, cli.overrides);
+    // File/env configuration is not known until after loading. Re-apply colour
+    // policy here so `noColor` cannot be ignored by the interactive UI.
+    setColorEnabled(!cfg.noColor && supportsColor(process.stderr));
     const [command, ...rest] = cli.command;
 
     switch (command) {

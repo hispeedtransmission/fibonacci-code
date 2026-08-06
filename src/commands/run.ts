@@ -51,21 +51,22 @@ const err = (s: string) => process.stderr.write(s);
 const out = (s: string) => process.stdout.write(s);
 
 let activeTurnController: AbortController | undefined;
+let activeIdleQuestionController: AbortController | undefined;
 let cancelActiveQuestion: (() => void) | undefined;
 let activeSpinner: Spinner | undefined;
 
 export function routeInteractiveSigint(
   controller: AbortController | undefined,
   cancelQuestion: (() => void) | undefined,
-  closeIdle: () => void,
-): 'cancelled' | 'closed' {
-  if (controller) {
-    controller.abort();
+  resetIdle: () => void,
+): 'cancelled' | 'reset' {
+  if (controller) controller.abort();
+  if (controller || cancelQuestion) {
     cancelQuestion?.();
     return 'cancelled';
   }
-  closeIdle();
-  return 'closed';
+  resetIdle();
+  return 'reset';
 }
 
 export function slashArgumentError(cmd: string, args: string[]): string | undefined {
@@ -107,18 +108,20 @@ function currentBranch(cwd: string): string | undefined {
 
 export async function runCommand(opts: RunOptions): Promise<number> {
   const { cfg, cwd } = opts;
-  const { provider, auth, model } = await createProvider(cfg);
+  const { provider, auth, model: requestedModel } = await createProvider(cfg);
+  const model = await resolveRequestedModel(provider, requestedModel);
 
   const projectDoc = await loadProjectDoc(cwd);
-  const branch = currentBranch(cwd);
-  const instructions = (activeModel: string, activeApproval: ApprovalMode) =>
-    buildSystemPrompt({
+  const instructions = (activeModel: string, activeApproval: ApprovalMode) => {
+    const branch = currentBranch(cwd);
+    return buildSystemPrompt({
       cwd,
       approval: activeApproval,
       model: activeModel,
       ...(projectDoc ? { projectDoc } : {}),
       ...(branch ? { gitBranch: branch } : {}),
     });
+  };
 
   let rl: Interface | undefined;
   const ensureReadline = (): Interface => {
@@ -130,7 +133,9 @@ export async function runCommand(opts: RunOptions): Promise<number> {
         completer: completeRepl,
       });
       const created = rl;
-      created.on('SIGINT', () => routeInteractiveSigint(activeTurnController, cancelActiveQuestion, () => created.close()));
+      created.on('SIGINT', () =>
+        routeInteractiveSigint(activeTurnController, cancelActiveQuestion, () => activeIdleQuestionController?.abort()),
+      );
     }
     return rl;
   };
@@ -168,12 +173,20 @@ export async function runCommand(opts: RunOptions): Promise<number> {
       err(`${Style.dim('Try: fib "your question"   or   fib --help')}\n`);
       return ExitCode.USAGE;
     }
-    const code = await runTurn(agent, prompt, opts.quiet);
-    rl?.close();
+    let code: number;
+    try {
+      code = await runTurn(agent, prompt, opts.quiet);
+    } finally {
+      rl?.close();
+    }
     return code;
   }
 
-  return await repl(agent, provider, ensureReadline(), opts);
+  try {
+    return await repl(agent, provider, ensureReadline(), opts);
+  } finally {
+    rl?.close();
+  }
 }
 
 /**
@@ -205,6 +218,7 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
    * the answer.
    */
   let midLine = false;
+  let incomplete = false;
   const closeLine = () => {
     if (midLine) {
       out('\n');
@@ -257,6 +271,17 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
           spinner.stop();
           break;
 
+        case 'incomplete':
+          spinner.stop();
+          closeLine();
+          incomplete = true;
+          err(
+            event.text === 'refusal'
+              ? `${Style.yellow('!')} The provider refused to complete this response.\n`
+              : `${Style.yellow('!')} The response reached its output limit and may be incomplete.\n`,
+          );
+          break;
+
         case 'limit_reached':
           spinner.stop();
           closeLine();
@@ -280,7 +305,7 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
     if (!quiet && (usage.inputTokens > 0 || usage.outputTokens > 0)) {
       err(`${Style.dim(formatUsage(usage))}\n`);
     }
-    return ExitCode.OK;
+    return incomplete ? ExitCode.GENERIC : ExitCode.OK;
   } catch (e) {
     spinner.stop();
     if (e instanceof CancelledError || controller.signal.aborted) {
@@ -362,11 +387,12 @@ function slashHelp(): string {
 }
 
 export async function questionOrEof(
-  questioner: { question(prompt: string): Promise<string> },
+  questioner: { question(prompt: string, options?: { signal?: AbortSignal }): Promise<string> },
   prompt: string,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
   try {
-    return await questioner.question(prompt);
+    return await questioner.question(prompt, signal ? { signal } : undefined);
   } catch {
     return undefined;
   }
@@ -381,8 +407,18 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
   if (Array.isArray(rlAny.history)) rlAny.history = history.slice().reverse();
 
   for (;;) {
-    const line = await questionOrEof(rl, brandPrompt());
-    if (line === undefined) break;
+    const idleQuestion = new AbortController();
+    activeIdleQuestionController = idleQuestion;
+    let line: string | undefined;
+    try {
+      line = await questionOrEof(rl, brandPrompt(), idleQuestion.signal);
+    } finally {
+      if (activeIdleQuestionController === idleQuestion) activeIdleQuestionController = undefined;
+    }
+    if (line === undefined) {
+      if (idleQuestion.signal.aborted) continue;
+      break;
+    }
 
     const input = line.trim();
     if (input === '') continue;
@@ -450,7 +486,14 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
         }
 
         err(`${modelMenu(models, agent.model, terminalWidth())}\n`);
-        const answer = await questionOrEof(rl, `${Style.dim(`Model [${agent.model}]: `)}`);
+        const cancelModelQuestion = () => rl.write('q\n');
+        cancelActiveQuestion = cancelModelQuestion;
+        let answer: string | undefined;
+        try {
+          answer = await questionOrEof(rl, `${Style.dim(`Model [${agent.model}]: `)}`);
+        } finally {
+          if (cancelActiveQuestion === cancelModelQuestion) cancelActiveQuestion = undefined;
+        }
         if (answer === undefined) break;
         try {
           const selected = resolveModelChoice(answer, models, agent.model);
@@ -506,10 +549,10 @@ async function loadHistory(): Promise<string[]> {
   }
 }
 
-async function saveHistory(line: string): Promise<void> {
+export async function saveHistory(line: string): Promise<void> {
   try {
     await mkdir(fibonacciHome(), { recursive: true, mode: 0o700 });
-    await appendFile(historyPath(), `${line}\n`, 'utf8');
+    await appendFile(historyPath(), `${line}\n`, { encoding: 'utf8', mode: 0o600 });
   } catch {
     // History is a convenience; never fail a turn over it.
   }

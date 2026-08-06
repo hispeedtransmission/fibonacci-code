@@ -92,12 +92,75 @@ export interface ResolvedConfig extends Config {
 async function readJsonIfExists(path: string): Promise<Record<string, unknown> | null> {
   if (!existsSync(path)) return null;
   try {
-    return JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
+    if (!isRecord(parsed)) throw invalidConfig(path, 'root must be a JSON object');
+    validateConfigLayer(parsed, path);
+    return parsed;
   } catch (err) {
+    if (err instanceof UsageError) throw err;
     throw new UsageError(
       `Config file is not valid JSON: ${path}`,
       `Fix the syntax error, or delete the file to fall back to defaults. (${(err as Error).message})`,
     );
+  }
+}
+
+const REASONING_EFFORTS: readonly ReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh'];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function invalidConfig(path: string, detail: string): UsageError {
+  return new UsageError(`Invalid config in ${path}: ${detail}.`, 'Fix or remove the invalid value; unsafe values are never accepted.');
+}
+
+function requireNonemptyString(value: unknown, path: string, field: string): asserts value is string {
+  if (typeof value !== 'string' || value.trim() === '') throw invalidConfig(path, `${field} must be a non-empty string`);
+}
+
+function validateProfile(value: unknown, path: string, field: string, requireProvider = false): void {
+  if (!isRecord(value)) throw invalidConfig(path, `${field} must be an object`);
+  if (requireProvider && value['provider'] === undefined) throw invalidConfig(path, `${field}.provider is required`);
+  if (value['provider'] !== undefined && value['provider'] !== 'codex' && value['provider'] !== 'openai') {
+    throw invalidConfig(path, `${field}.provider must be "codex" or "openai"`);
+  }
+  for (const key of ['baseUrl', 'model', 'apiKeyEnv'] as const) {
+    if (value[key] !== undefined) requireNonemptyString(value[key], path, `${field}.${key}`);
+  }
+  if (value['headers'] !== undefined) {
+    if (!isRecord(value['headers'])) throw invalidConfig(path, `${field}.headers must be an object of strings`);
+    for (const [name, header] of Object.entries(value['headers'])) {
+      requireNonemptyString(name, path, `${field}.headers key`);
+      requireNonemptyString(header, path, `${field}.headers.${name}`);
+    }
+  }
+}
+
+function validateConfigLayer(layer: Record<string, unknown>, path: string): void {
+  if (layer['defaultProfile'] !== undefined) requireNonemptyString(layer['defaultProfile'], path, 'defaultProfile');
+  if (layer['model'] !== undefined) requireNonemptyString(layer['model'], path, 'model');
+  if (layer['approval'] !== undefined && !(APPROVAL_MODES as readonly unknown[]).includes(layer['approval'])) {
+    throw invalidConfig(path, `approval must be one of ${APPROVAL_MODES.join(', ')}; got ${JSON.stringify(layer['approval'])}`);
+  }
+  if (layer['reasoningEffort'] !== undefined && !(REASONING_EFFORTS as readonly unknown[]).includes(layer['reasoningEffort'])) {
+    throw invalidConfig(path, `reasoningEffort must be one of ${REASONING_EFFORTS.join(', ')}`);
+  }
+  for (const key of ['maxTurns', 'commandTimeout'] as const) {
+    const value = layer[key];
+    if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value) || value < 1)) {
+      throw invalidConfig(path, `${key} must be a positive integer`);
+    }
+  }
+  if (layer['noColor'] !== undefined && typeof layer['noColor'] !== 'boolean') {
+    throw invalidConfig(path, 'noColor must be a boolean');
+  }
+  if (layer['profiles'] !== undefined) {
+    if (!isRecord(layer['profiles'])) throw invalidConfig(path, 'profiles must be an object');
+    for (const [name, profile] of Object.entries(layer['profiles'])) {
+      requireNonemptyString(name, path, 'profile name');
+      validateProfile(profile, path, `profiles.${name}`);
+    }
   }
 }
 
@@ -171,6 +234,9 @@ export async function loadConfig(
   }
 
   cfg = applyEnv(cfg);
+  for (const [name, profile] of Object.entries(cfg.profiles)) {
+    validateProfile(profile, sources.at(-1) ?? '<defaults and environment>', `profiles.${name}`, true);
+  }
 
   // CLI flags last.
   if (overrides.approval) cfg.approval = overrides.approval;
