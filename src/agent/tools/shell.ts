@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { argOptionalNumber, argString, truncateForModel, type Tool, type ToolOutcome } from './types.ts';
 import type { ApprovalMode } from '../../config.ts';
+import { CancelledError } from '../../errors.ts';
 
 /**
  * Shell execution.
@@ -69,6 +70,7 @@ export function runCommand(
   command: string,
   opts: { cwd: string; timeoutMs: number; signal: AbortSignal; env?: NodeJS.ProcessEnv },
 ): Promise<RunResult> {
+  if (opts.signal.aborted) return Promise.reject(new CancelledError('Command cancelled before launch'));
   return new Promise((resolve, reject) => {
     const shell = process.platform === 'win32' ? 'cmd.exe' : (process.env['SHELL'] ?? '/bin/sh');
     const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-c', command];
@@ -217,7 +219,7 @@ export const bashTool: Tool = {
     const body = parts.join('\n') || '[no output]';
     return {
       output: truncateForModel(body),
-      isError: result.timedOut || (result.code !== null && result.code !== 0),
+      isError: result.timedOut || result.signal !== null || (result.code !== null && result.code !== 0),
     };
   },
 };

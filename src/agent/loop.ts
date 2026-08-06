@@ -77,6 +77,8 @@ export class Agent {
   setModel(model: string): void {
     const next = model.trim();
     if (next === '') throw new FibonacciError('Model id cannot be empty.');
+    if (/[\u0000-\u001f\u007f-\u009f]/.test(next)) throw new FibonacciError('Model id cannot contain control characters.');
+    if (/\s/.test(next)) throw new FibonacciError('Model id cannot contain whitespace.');
     this.#model = next;
   }
 

@@ -13,7 +13,7 @@ import { buildSystemPrompt, PROJECT_DOC_FILES } from '../agent/prompt.ts';
 import type { ApprovalRequest } from '../agent/tools/types.ts';
 import { VERSION } from '../version.ts';
 import { fibonacciHome, historyPath } from '../paths.ts';
-import { Style } from '../ui/ansi.ts';
+import { sanitizeInline, sanitizeMultiline, Style } from '../ui/ansi.ts';
 import {
   banner,
   brandPrompt,
@@ -47,8 +47,32 @@ export interface RunOptions {
   interactive: boolean;
 }
 
-const out = (s: string) => process.stdout.write(s);
 const err = (s: string) => process.stderr.write(s);
+const out = (s: string) => process.stdout.write(s);
+
+let activeTurnController: AbortController | undefined;
+let cancelActiveQuestion: (() => void) | undefined;
+let activeSpinner: Spinner | undefined;
+
+export function routeInteractiveSigint(
+  controller: AbortController | undefined,
+  cancelQuestion: (() => void) | undefined,
+  closeIdle: () => void,
+): 'cancelled' | 'closed' {
+  if (controller) {
+    controller.abort();
+    cancelQuestion?.();
+    return 'cancelled';
+  }
+  closeIdle();
+  return 'closed';
+}
+
+export function slashArgumentError(cmd: string, args: string[]): string | undefined {
+  if (['exit', 'quit', 'help', 'clear', 'usage', 'status'].includes(cmd) && args.length > 0) return `Usage: /${cmd}`;
+  if (cmd === 'approval' && args.length > 1) return 'Usage: /approval <mode>';
+  return undefined;
+}
 
 /** Load repo-specific instructions, first match wins. */
 async function loadProjectDoc(cwd: string): Promise<string | undefined> {
@@ -98,12 +122,16 @@ export async function runCommand(opts: RunOptions): Promise<number> {
 
   let rl: Interface | undefined;
   const ensureReadline = (): Interface => {
-    rl ??= createInterface({
-      input: process.stdin,
-      output: process.stderr,
-      terminal: process.stdin.isTTY === true,
-      completer: completeRepl,
-    });
+    if (!rl) {
+      rl = createInterface({
+        input: process.stdin,
+        output: process.stderr,
+        terminal: process.stdin.isTTY === true,
+        completer: completeRepl,
+      });
+      const created = rl;
+      created.on('SIGINT', () => routeInteractiveSigint(activeTurnController, cancelActiveQuestion, () => created.close()));
+    }
     return rl;
   };
 
@@ -157,10 +185,18 @@ export async function runCommand(opts: RunOptions): Promise<number> {
  */
 async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<number> {
   const controller = new AbortController();
+  activeTurnController = controller;
+  let terminated = false;
   const onSigint = () => controller.abort();
+  const onSigterm = () => {
+    terminated = true;
+    controller.abort();
+  };
   process.on('SIGINT', onSigint);
+  process.on('SIGTERM', onSigterm);
 
   const spinner = new Spinner();
+  if (!quiet) activeSpinner = spinner;
 
   /**
    * True when the cursor is parked mid-row because we streamed text without a
@@ -182,7 +218,7 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
     for await (const event of agent.send(prompt, controller.signal)) {
       switch (event.type) {
         case 'text_delta': {
-          const text = event.text ?? '';
+          const text = sanitizeMultiline(event.text ?? '');
           if (text === '') break;
           spinner.stop(); // no-op unless the spinner still owns the row
           out(text);
@@ -201,7 +237,7 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
           // completion, with its real status — printing on start too would
           // double every entry in piped output, where there is no cursor to
           // overwrite.
-          if (!quiet) spinner.update(event.tool?.summary ?? 'working');
+          if (!quiet) spinner.start(event.tool?.summary ?? 'working');
           break;
 
         case 'tool_end':
@@ -235,6 +271,11 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
     spinner.stop();
     closeLine();
 
+    if (controller.signal.aborted) {
+      err(`${Style.dim('Cancelled.')}\n`);
+      return terminated ? ExitCode.TERMINATED : ExitCode.CANCELLED;
+    }
+
     const usage = agent.usage;
     if (!quiet && (usage.inputTokens > 0 || usage.outputTokens > 0)) {
       err(`${Style.dim(formatUsage(usage))}\n`);
@@ -244,12 +285,15 @@ async function runTurn(agent: Agent, prompt: string, quiet: boolean): Promise<nu
     spinner.stop();
     if (e instanceof CancelledError || controller.signal.aborted) {
       err(`\n${Style.dim('Cancelled.')}\n`);
-      return ExitCode.CANCELLED;
+      return terminated ? ExitCode.TERMINATED : ExitCode.CANCELLED;
     }
     throw e;
   } finally {
     spinner.stop();
     process.removeListener('SIGINT', onSigint);
+    process.removeListener('SIGTERM', onSigterm);
+    if (activeTurnController === controller) activeTurnController = undefined;
+    if (activeSpinner === spinner) activeSpinner = undefined;
   }
 }
 
@@ -258,25 +302,47 @@ function firstLine(s: string): string {
   return line.length > 60 ? `${line.slice(0, 59)}…` : line;
 }
 
+function safeErrorMessage(error: unknown): string {
+  return sanitizeInline(error instanceof Error ? error.message : String(error));
+}
+
 /** The approval prompt. Defaults to "no" for anything flagged dangerous. */
 async function askApproval(rl: Interface, req: ApprovalRequest): Promise<boolean> {
+  activeSpinner?.stop();
   err('\n');
+  const safeSummary = sanitizeInline(req.summary);
   if (req.detail) {
-    const looksLikeDiff = req.detail.startsWith('---') || req.detail.includes('\n@@');
-    err(looksLikeDiff ? `${diffLines(req.detail)}\n` : `${Style.cyan('$')} ${req.detail}\n`);
+    const safeDetail = sanitizeMultiline(req.detail);
+    const looksLikeDiff = safeDetail.startsWith('---') || safeDetail.includes('\n@@');
+    err(looksLikeDiff ? `${diffLines(safeDetail)}\n` : `${Style.cyan('$')} ${safeDetail}\n`);
   }
 
   if (req.dangerous) {
-    err(`${Style.red('⚠  This looks destructive.')} ${Style.bold(req.summary)}\n`);
+    err(`${Style.red('⚠  This looks destructive.')} ${Style.bold(safeSummary)}\n`);
   } else {
-    err(`${Style.bold(req.summary)}\n`);
+    err(`${Style.bold(safeSummary)}\n`);
   }
 
   const suffix = req.dangerous ? '[y/N]' : '[Y/n]';
-  const answer = (await rl.question(`${Style.dim(`Allow? ${suffix} `)}`)).trim().toLowerCase();
+  const cancelThisQuestion = () => rl.write('n\n');
+  cancelActiveQuestion = cancelThisQuestion;
+  const closeOnSignal = () => rl.close();
+  process.once('SIGINT', closeOnSignal);
+  process.once('SIGTERM', closeOnSignal);
+  let rawAnswer: string | undefined;
+  try {
+    rawAnswer = await questionOrEof(rl, `${Style.dim(`Allow? ${suffix} `)}`);
+  } finally {
+    process.removeListener('SIGINT', closeOnSignal);
+    process.removeListener('SIGTERM', closeOnSignal);
+    if (cancelActiveQuestion === cancelThisQuestion) cancelActiveQuestion = undefined;
+  }
+  if (rawAnswer === undefined) throw new CancelledError('Input closed during approval');
+  const answer = rawAnswer.trim().toLowerCase();
 
-  if (req.dangerous) return answer === 'y' || answer === 'yes';
-  return answer === '' || answer === 'y' || answer === 'yes';
+  const approved = req.dangerous ? answer === 'y' || answer === 'yes' : answer === '' || answer === 'y' || answer === 'yes';
+  activeSpinner?.start(approved ? 'running approved tool' : 'recording denial');
+  return approved;
 }
 
 function slashHelp(): string {
@@ -323,6 +389,11 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
 
     if (input.startsWith('/')) {
       const [cmd, ...args] = input.slice(1).split(/\s+/);
+      const argumentError = slashArgumentError(cmd ?? '', args);
+      if (argumentError) {
+        err(`${Style.yellow('!')} ${argumentError}\n`);
+        continue;
+      }
       if (cmd === 'exit' || cmd === 'quit') break;
       if (cmd === 'help') {
         err(`${slashHelp()}\n`);
@@ -361,7 +432,7 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
             agent.setModel(await resolveRequestedModel(provider, requested));
             err(`${Style.green('✓')} Model set to ${Style.bold(agent.model)} for future turns.\n`);
           } catch (error) {
-            err(`${Style.yellow('!')} ${(error as Error).message} Current model: ${agent.model}.\n`);
+            err(`${Style.yellow('!')} ${safeErrorMessage(error)} Current model: ${agent.model}.\n`);
           }
           continue;
         }
@@ -370,7 +441,7 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
         try {
           models = await provider.listModels();
         } catch (error) {
-          err(`${Style.yellow('!')} Could not list models: ${(error as Error).message}. Current model: ${agent.model}.\n`);
+          err(`${Style.yellow('!')} Could not list models: ${safeErrorMessage(error)}. Current model: ${agent.model}.\n`);
           continue;
         }
         if (models.length === 0) {
@@ -390,7 +461,7 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
             err(`${Style.green('✓')} Model set to ${Style.bold(agent.model)} for future turns.\n`);
           }
         } catch (error) {
-          err(`${Style.yellow('!')} ${(error as Error).message}\n`);
+          err(`${Style.yellow('!')} ${safeErrorMessage(error)}\n`);
         }
         continue;
       }
@@ -401,19 +472,23 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
           continue;
         }
         if (!APPROVAL_MODES.includes(requested as ApprovalMode)) {
-          err(`${Style.yellow('!')} Unknown approval mode "${requested}". Choose: ${APPROVAL_MODES.join(' | ')}\n`);
+          err(`${Style.yellow('!')} Unknown approval mode "${sanitizeInline(requested)}". Choose: ${APPROVAL_MODES.join(' | ')}\n`);
           continue;
         }
         agent.setApproval(requested as ApprovalMode);
         err(`${Style.green('✓')} Approval mode set to ${Style.bold(agent.approval)} for future tools.\n`);
         continue;
       }
-      err(`${Style.dim(`Unknown command /${cmd ?? ''}. Try /help.`)}\n`);
+      err(`${Style.dim(`Unknown command /${sanitizeInline(cmd ?? '')}. Try /help.`)}\n`);
       continue;
     }
 
     await saveHistory(input);
-    await runTurn(agent, input, opts.quiet);
+    const turnCode = await runTurn(agent, input, opts.quiet);
+    if (turnCode === ExitCode.TERMINATED) {
+      rl.close();
+      return turnCode;
+    }
     err('\n');
   }
 

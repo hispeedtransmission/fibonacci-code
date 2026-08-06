@@ -3,15 +3,17 @@ import assert from 'node:assert/strict';
 import {
   banner,
   brandPrompt,
+  diffLines,
   foldedFMark,
   labeledPanel,
   panel,
   spinnerLabel,
+  supportsInteractiveControl,
   statusPanel,
   toolLine,
   wrapText,
 } from '../src/ui/render.ts';
-import { sanitizeInline, stripAnsi, visibleWidth } from '../src/ui/ansi.ts';
+import { sanitizeInline, sanitizeMultiline, stripAnsi, supportsUnicode, visibleWidth } from '../src/ui/ansi.ts';
 
 describe('responsive terminal rendering', () => {
   const bannerOptions = {
@@ -36,6 +38,20 @@ describe('responsive terminal rendering', () => {
     for (const columns of [8, 12, 19, 20, 23, 30]) {
       const rendered = stripAnsi(banner(bannerOptions, columns));
       assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= columns), `${columns}:\n${rendered}`);
+    }
+  });
+
+  test('falls back to ASCII chrome for a dumb terminal', () => {
+    const prior = process.env['TERM'];
+    process.env['TERM'] = 'dumb';
+    try {
+      assert.equal(supportsUnicode(), false);
+      const rendered = stripAnsi(banner(bannerOptions, 30));
+      assert.match(rendered, /^\+-/);
+      assert.equal(rendered.includes('╭'), false);
+    } finally {
+      if (prior === undefined) delete process.env['TERM'];
+      else process.env['TERM'] = prior;
     }
   });
 
@@ -74,6 +90,15 @@ describe('responsive terminal rendering', () => {
     assert.ok(body.every((line) => visibleWidth(line) <= 36), rendered);
   });
 
+  test('labeled panels use a compact unboxed layout when labels would starve values', () => {
+    const rendered = stripAnsi(
+      labeledPanel('FBNC / COMMAND INDEX', [['/approval <m>', 'suggest | auto-edit | full-auto']], 20),
+    );
+    assert.equal(rendered.includes('╭'), false);
+    assert.match(rendered, /suggest \| auto-edit/);
+    assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= 20), rendered);
+  });
+
   test('status HUD exposes the expected session fields and remains responsive', () => {
     const rendered = statusPanel(
       {
@@ -101,6 +126,12 @@ describe('responsive terminal rendering', () => {
     assert.match(stripAnsi(toolLine({ summary: 'read source', status: 'error' })), /FAULT/);
   });
 
+  test('disables interactive cursor controls for pipes and dumb terminals', () => {
+    assert.equal(supportsInteractiveControl({ isTTY: false }, 'xterm-256color'), false);
+    assert.equal(supportsInteractiveControl({ isTTY: true }, 'dumb'), false);
+    assert.equal(supportsInteractiveControl({ isTTY: true }, 'xterm-256color'), true);
+  });
+
   test('spinner labels are one sanitized row bounded to terminal width', () => {
     const label = spinnerLabel('run tests\n\x1b]52;c;payload\x07\x1b[31m' + 'x'.repeat(40), 20);
 
@@ -113,6 +144,7 @@ describe('responsive terminal rendering', () => {
     assert.equal(visibleWidth('😀'), 2);
     assert.equal(visibleWidth('👩‍💻'), 2);
     assert.equal(visibleWidth('\x1b]8;;https://example.com\x07link\x1b]8;;\x07'), 4);
+    assert.equal(stripAnsi('A\x1bPpayload\x1b\\B\x1b_apc\x1b\\C\x1bcD'), 'ABCD');
     assert.equal(visibleWidth('\x1b[?25ltext\x1b[?25h'), 4);
   });
 
@@ -120,6 +152,13 @@ describe('responsive terminal rendering', () => {
     const sanitized = sanitizeInline('model\nname\x1b]52;c;payload\x07\x1b[?25l');
     assert.equal(sanitized, 'model name');
     assert.equal(sanitized.includes('\x1b'), false);
+  });
+
+  test('sanitizes terminal commands without flattening multiline tool output', () => {
+    const malicious = 'first\n\x1b]52;c;payload\x07second\n\x1b[31mthird\x1b[0m';
+    assert.equal(sanitizeMultiline(malicious), 'first\nsecond\nthird');
+    assert.equal(toolLine({ summary: 'done', status: 'ok', detail: malicious }).includes('\x1b]'), false);
+    assert.equal(diffLines(`--- a\n+++ b\n+${malicious}`).includes('\x1b]'), false);
   });
 
   test('wrapping never leaks ANSI styles or splits joined emoji', () => {

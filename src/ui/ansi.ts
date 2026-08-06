@@ -68,6 +68,7 @@ export function supportsColor(stream: NodeJS.WriteStream): boolean {
  * emulator, e.g. VS Code's integrated terminal).
  */
 export function supportsUnicode(): boolean {
+  if (process.env['TERM'] === 'dumb') return false;
   if (process.platform !== 'win32') return true;
   return process.env['WT_SESSION'] !== undefined || process.env['TERM_PROGRAM'] !== undefined;
 }
@@ -105,10 +106,11 @@ export const Style = {
   bgCyan: styler('46'),
 } as const;
 
-// Strip CSI (including private/colon forms) and OSC commands such as terminal
-// hyperlinks and clipboard sequences. OSC may terminate with BEL or ST.
+// Strip CSI, OSC, DCS/SOS/PM/APC string commands, and RIS. String commands
+// may span lines and terminate with BEL (OSC) or ST. Keep this broader than
+// styling alone: provider/tool text is untrusted terminal input.
 // eslint-disable-next-line no-control-regex
-const ANSI_PATTERN = /\x1b(?:\][^\x07]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~])/g;
+const ANSI_PATTERN = /\x1b(?:\][\s\S]*?(?:\x07|\x1b\\)|[PX^_][\s\S]*?\x1b\\|\[[0-?]*[ -/]*[@-~]|c)/g;
 
 export function stripAnsi(s: string): string {
   return s.replace(ANSI_PATTERN, '');
@@ -120,6 +122,14 @@ export function sanitizeInline(s: string): string {
     .replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** Strip terminal commands while preserving the intentional line structure of logs and diffs. */
+export function sanitizeMultiline(s: string): string {
+  return s
+    .split(/\r?\n/)
+    .map((line) => stripAnsi(line).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, ''))
+    .join('\n');
 }
 
 // Zero-width or combining code points that occupy a terminal cell but no

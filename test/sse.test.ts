@@ -135,6 +135,20 @@ describe('parseSseJson', () => {
 });
 
 describe('parseSse — cancellation', () => {
+  test('stops immediately when the signal was already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+
+    assert.deepEqual(await collect(parseSse(stream, controller.signal)), []);
+    assert.equal(cancelled, true);
+  });
+
   test('stops when the signal aborts', async () => {
     const controller = new AbortController();
     const stream = new ReadableStream<Uint8Array>({

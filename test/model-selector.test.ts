@@ -27,6 +27,14 @@ describe('model selector', () => {
     }
   });
 
+  test('caps huge catalogs without hiding the current model or breaking catalog numbers', () => {
+    const catalog = Array.from({ length: 80 }, (_, index) => ({ id: `model-${index + 1}` }));
+    const rendered = stripAnsi(modelMenu(catalog, 'model-80', 50));
+    assert.match(rendered, /80.*model-80.*current/);
+    assert.match(rendered, /62 more.*exact model id/i);
+    assert.ok(rendered.split('\n').length <= 20, rendered);
+  });
+
   test('resolves a number, exact id, empty current selection, and cancel', () => {
     assert.equal(resolveModelChoice('2', models, 'gpt-5.6-sol'), models[1]?.id);
     assert.equal(resolveModelChoice('gpt-5.6-sol', models, 'other'), 'gpt-5.6-sol');

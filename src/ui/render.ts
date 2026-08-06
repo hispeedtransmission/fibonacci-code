@@ -16,6 +16,7 @@ import { homedir } from 'node:os';
 import {
   Style,
   sanitizeInline,
+  sanitizeMultiline,
   stripAnsi,
   styleCode,
   supportsUnicode,
@@ -29,7 +30,6 @@ const BRAND_COLOR = '38;2;12;155;114'; // PG7 phthalo green from the Fibonacci i
 const BRAND_ORANGE = '38;2;239;91;42';
 const SEQUENCE_RAIL = '01·01·02·03·05·08·13';
 
-const MIN_BOX_WIDTH = 24;
 const MAX_BOX_WIDTH = 72;
 
 /**
@@ -198,16 +198,19 @@ export function banner(
   ].join('\n');
 }
 
+/** A compact panel variant for widths where borders or label columns consume the content. */
+function compactPanel(title: string, rows: string[], columns: number): string {
+  const width = Math.max(1, columns);
+  const titleLines = wrapText(stripAnsi(title), width)
+    .split('\n')
+    .map((line) => styleCode(BRAND_COLOR, Style.bold(line)));
+  const body = rows.flatMap((row) => wrapText(stripAnsi(row), width).split('\n'));
+  return [...titleLines, ...body].join('\n');
+}
+
 /** A responsive bordered panel. Input rows are plain text; styling is applied here. */
 export function panel(title: string, rows: string[], columns = terminalWidth()): string {
-  if (columns < 20) {
-    const width = Math.max(1, columns);
-    const titleLines = wrapText(stripAnsi(title), width)
-      .split('\n')
-      .map((line) => styleCode(BRAND_COLOR, Style.bold(line)));
-    const body = rows.flatMap((row) => wrapText(stripAnsi(row), width).split('\n'));
-    return [...titleLines, ...body].join('\n');
-  }
+  if (columns < 20) return compactPanel(title, rows, columns);
 
   const chars = boxChars();
   const boxWidth = Math.max(20, Math.min(MAX_BOX_WIDTH, columns));
@@ -225,7 +228,7 @@ export function panel(title: string, rows: string[], columns = terminalWidth()):
 }
 
 export function labeledPanel(title: string, entries: ReadonlyArray<readonly [string, string]>, columns = terminalWidth()): string {
-  if (columns < 20) return panel(title, entries.map(([label, value]) => `${label}: ${value}`), columns);
+  if (columns < 28) return compactPanel(title, entries.map(([label, value]) => `${label} ${value}`), columns);
 
   const boxWidth = Math.max(20, Math.min(MAX_BOX_WIDTH, columns));
   const innerWidth = boxWidth - 4;
@@ -297,12 +300,12 @@ export function toolLine(opts: {
   const safeSummary = sanitizeInline(opts.summary);
   const label = safeName ? `${safeName}  ${safeSummary}` : safeSummary;
   const base = `  ${state} ${bullet} ${label}`;
-  return opts.detail ? `${base}\n    ${Style.dim(opts.detail)}` : base;
+  return opts.detail ? `${base}\n    ${Style.dim(sanitizeMultiline(opts.detail))}` : base;
 }
 
 /** Colourize a unified diff. Purely additive styling — never re-wraps or otherwise touches line content. */
 export function diffLines(patch: string): string {
-  return patch
+  return sanitizeMultiline(patch)
     .split('\n')
     .map((line) => {
       // File headers start with +++/--- and would otherwise get caught by
@@ -335,6 +338,10 @@ process.on('exit', () => {
   if (cursorHiddenByASpinner && process.stderr.isTTY) process.stderr.write(showCursor());
 });
 
+export function supportsInteractiveControl(stream: { isTTY?: boolean }, term = process.env['TERM']): boolean {
+  return stream.isTTY === true && term !== 'dumb';
+}
+
 /**
  * A stderr spinner. Writing status to stderr (not stdout) is what keeps
  * `fib -p "..." > out.txt` producing clean, spinner-free output on stdout
@@ -348,7 +355,7 @@ export class Spinner {
   private timer: ReturnType<typeof setInterval> | undefined;
 
   constructor() {
-    this.enabled = process.stderr.isTTY === true;
+    this.enabled = supportsInteractiveControl(process.stderr);
     this.frames = supportsUnicode() ? BRAILLE_FRAMES : ASCII_FRAMES;
   }
 

@@ -289,6 +289,8 @@ describe('Agent loop', () => {
     const agent = new Agent(baseOptions(scriptedProvider([]), []));
 
     assert.throws(() => agent.setModel('   '), /Model id cannot be empty/);
+    assert.throws(() => agent.setModel('fake 2'), /cannot contain whitespace/);
+    assert.throws(() => agent.setModel('fake\x1b[31m'), /cannot contain control characters/);
     assert.equal(agent.model, 'fake-1');
     agent.setModel('  fake-2  ');
     assert.equal(agent.model, 'fake-2');

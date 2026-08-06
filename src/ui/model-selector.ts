@@ -21,12 +21,17 @@ function truncateRight(text: string, width: number): string {
 export function modelMenu(models: ModelInfo[], current: string, terminalColumns: number): string {
   const width = Math.max(1, terminalColumns);
   const lines = [Style.bold(truncateRight('FBNC / MODEL INDEX · Select a model', width))];
+  const currentIndex = models.findIndex((model) => model.id === current);
+  const visible = models.slice(0, 18).map((model, catalogIndex) => ({ model, catalogIndex }));
+  if (currentIndex >= visible.length && visible.length > 0) {
+    visible[visible.length - 1] = { model: models[currentIndex]!, catalogIndex: currentIndex };
+  }
 
-  for (const [index, model] of models.entries()) {
+  for (const { model, catalogIndex } of visible) {
     const safeId = sanitizeInline(model.id);
     const marker = model.id === current ? Style.green(supportsUnicode() ? '●' : '*') : ' ';
     if (width < 12) {
-      const rawPrefix = `${index + 1}${marker} `;
+      const rawPrefix = `${catalogIndex + 1}${marker} `;
       const prefix = truncateRight(rawPrefix, width);
       const remaining = width - visibleWidth(prefix);
       lines.push(remaining > 0 ? `${prefix}${truncateRight(safeId, remaining)}` : prefix);
@@ -34,12 +39,14 @@ export function modelMenu(models: ModelInfo[], current: string, terminalColumns:
     }
 
     const suffix = model.id === current && width >= 24 ? '  current' : '';
-    const prefix = `  ${index + 1} ${marker} `;
+    const prefix = `  ${catalogIndex + 1} ${marker} `;
     const idWidth = Math.max(1, width - visibleWidth(prefix) - visibleWidth(suffix));
     lines.push(`${prefix}${truncateRight(safeId, idWidth)}${Style.dim(suffix)}`);
   }
 
-  lines.push(Style.dim(truncateRight('Enter a number or model id · q to cancel', width)));
+  const hidden = models.length - visible.length;
+  const hint = hidden > 0 ? `${hidden} more · enter exact model id · q cancel` : 'Enter a number or model id · q to cancel';
+  lines.push(Style.dim(truncateRight(hint, width)));
   return lines.join('\n');
 }
 

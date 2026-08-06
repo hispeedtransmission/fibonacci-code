@@ -13,6 +13,7 @@ export const ExitCode = {
   NETWORK: 4,
   PROVIDER: 5,
   CANCELLED: 130, // 128 + SIGINT
+  TERMINATED: 143, // 128 + SIGTERM
 } as const;
 
 export type ExitCodeValue = (typeof ExitCode)[keyof typeof ExitCode];

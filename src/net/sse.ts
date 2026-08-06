@@ -92,7 +92,12 @@ export async function* parseSse(
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
 
-  const onAbort = () => void reader.cancel().catch(() => {});
+  if (signal?.aborted) {
+    await reader.cancel().catch(() => undefined);
+    return;
+  }
+
+  const onAbort = () => void reader.cancel().catch(() => undefined);
   signal?.addEventListener('abort', onAbort, { once: true });
 
   try {
