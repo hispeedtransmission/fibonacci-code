@@ -21,9 +21,18 @@ describe('model selector', () => {
   });
 
   test('stays width-safe in extremely narrow terminals', () => {
-    for (const columns of [1, 3, 6, 10, 19]) {
-      const rendered = stripAnsi(modelMenu(models, 'gpt-5.6-sol', columns));
-      assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= columns), `${columns}:\n${rendered}`);
+    const prior = process.env['TERM'];
+    try {
+      for (const term of ['xterm-256color', 'dumb']) {
+        process.env['TERM'] = term;
+        for (const columns of [1, 3, 6, 10, 19]) {
+          const rendered = stripAnsi(modelMenu(models, 'gpt-5.6-sol', columns));
+          assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= columns), `${term} ${columns}:\n${rendered}`);
+        }
+      }
+    } finally {
+      if (prior === undefined) delete process.env['TERM'];
+      else process.env['TERM'] = prior;
     }
   });
 

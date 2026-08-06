@@ -6,6 +6,7 @@ function truncateRight(text: string, width: number): string {
   if (visibleWidth(text) <= width) return text;
   const ellipsis = supportsUnicode() ? '…' : '...';
   const budget = Math.max(0, width - visibleWidth(ellipsis));
+  if (budget === 0) return ellipsis.slice(0, width);
   let kept = '';
   let used = 0;
   for (const char of text) {
