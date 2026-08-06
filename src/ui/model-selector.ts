@@ -20,7 +20,7 @@ function truncateRight(text: string, width: number): string {
 /** Render a compact, responsive menu suitable for stderr in an interactive REPL. */
 export function modelMenu(models: ModelInfo[], current: string, terminalColumns: number): string {
   const width = Math.max(20, terminalColumns);
-  const lines = [Style.bold('Select a model')];
+  const lines = [Style.bold(truncateRight('Select a model', width))];
 
   for (const [index, model] of models.entries()) {
     const marker = model.id === current ? Style.green(supportsUnicode() ? '●' : '*') : ' ';
@@ -30,8 +30,8 @@ export function modelMenu(models: ModelInfo[], current: string, terminalColumns:
     lines.push(`${prefix}${truncateRight(model.id, idWidth)}${Style.dim(suffix)}`);
   }
 
-  lines.push(Style.dim('Enter a number or model id · q to cancel'));
-  return lines.map((line) => truncateRight(line, width)).join('\n');
+  lines.push(Style.dim(truncateRight('Enter a number or model id · q to cancel', width)));
+  return lines.join('\n');
 }
 
 /** Turn selector input into a model id. Empty input keeps the current model. */

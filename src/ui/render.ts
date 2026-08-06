@@ -169,6 +169,43 @@ export function banner(opts: {
   return lines.join('\n');
 }
 
+/** A responsive bordered panel. Input rows are plain text; styling is applied here. */
+export function panel(title: string, rows: string[], columns = terminalWidth()): string {
+  const chars = boxChars();
+  const boxWidth = Math.max(20, Math.min(MAX_BOX_WIDTH, columns));
+  const innerWidth = boxWidth - 4;
+  const label = ` ${title} `;
+  const shownLabel = truncateRight(label, boxWidth - 4);
+  const topRun = chars.h + shownLabel + chars.h.repeat(Math.max(0, boxWidth - 3 - visibleWidth(shownLabel)));
+  const top = chars.tl + colorizeTitleRun(topRun, shownLabel) + chars.tr;
+  const bottom = chars.bl + chars.h.repeat(boxWidth - 2) + chars.br;
+  const body = rows.flatMap((row) => wrapText(row, innerWidth).split('\n'));
+  const rule = (content: string) => `${chars.v} ${padVisible(content, innerWidth)} ${chars.v}`;
+  return [top, ...body.map(rule), bottom].join('\n');
+}
+
+export function statusPanel(
+  status: {
+    model: string;
+    provider: string;
+    approval: string;
+    cwd: string;
+    branch?: string;
+    usage: string;
+  },
+  columns = terminalWidth(),
+): string {
+  const rows = [
+    `MODEL      ${status.model}`,
+    `PROVIDER   ${status.provider}`,
+    `APPROVAL   ${status.approval}`,
+    `WORKSPACE  ${status.cwd}`,
+    ...(status.branch ? [`BRANCH     ${status.branch}`] : []),
+    `USAGE      ${status.usage}`,
+  ];
+  return panel('session', rows, columns);
+}
+
 /** Brand-colour the word inside the top border, leave the rule itself dim. */
 function colorizeTitleRun(run: string, label: string): string {
   const idx = run.indexOf(label);
@@ -348,16 +385,37 @@ export function wrapText(text: string, width: number, indent = ''): string {
 
     let current = '';
     let currentWidth = 0;
-    for (const word of paragraph.split(' ')) {
-      const wordWidth = visibleWidth(word);
-      const sepWidth = current === '' ? 0 : 1;
-      if (current !== '' && currentWidth + sepWidth + wordWidth > avail) {
-        lines.push(indent + current);
-        current = word;
-        currentWidth = wordWidth;
+    for (const originalWord of paragraph.split(' ')) {
+      const chunks: string[] = [];
+      if (!originalWord.includes('\x1b') && visibleWidth(originalWord) > avail) {
+        let chunk = '';
+        let chunkWidth = 0;
+        for (const char of originalWord) {
+          const charWidth = visibleWidth(char);
+          if (chunk !== '' && chunkWidth + charWidth > avail) {
+            chunks.push(chunk);
+            chunk = '';
+            chunkWidth = 0;
+          }
+          chunk += char;
+          chunkWidth += charWidth;
+        }
+        if (chunk !== '') chunks.push(chunk);
       } else {
-        current = current === '' ? word : `${current} ${word}`;
-        currentWidth += sepWidth + wordWidth;
+        chunks.push(originalWord);
+      }
+
+      for (const word of chunks) {
+        const wordWidth = visibleWidth(word);
+        const sepWidth = current === '' ? 0 : 1;
+        if (current !== '' && currentWidth + sepWidth + wordWidth > avail) {
+          lines.push(indent + current);
+          current = word;
+          currentWidth = wordWidth;
+        } else {
+          current = current === '' ? word : `${current} ${word}`;
+          currentWidth += sepWidth + wordWidth;
+        }
       }
     }
     lines.push(indent + current);

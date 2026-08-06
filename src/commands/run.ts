@@ -14,7 +14,7 @@ import type { ApprovalRequest } from '../agent/tools/types.ts';
 import { VERSION } from '../version.ts';
 import { fibonacciHome, historyPath } from '../paths.ts';
 import { Style } from '../ui/ansi.ts';
-import { banner, diffLines, formatUsage, Spinner, terminalWidth, toolLine } from '../ui/render.ts';
+import { banner, diffLines, formatUsage, panel, Spinner, statusPanel, terminalWidth, toolLine, wrapText } from '../ui/render.ts';
 import { modelMenu, resolveModelChoice } from '../ui/model-selector.ts';
 
 /**
@@ -261,18 +261,25 @@ async function askApproval(rl: Interface, req: ApprovalRequest): Promise<boolean
   return answer === '' || answer === 'y' || answer === 'yes';
 }
 
-const SLASH_HELP = `${Style.bold('Slash commands')}
-  /help            Show this
-  /clear           Forget the conversation so far
-  /model [id]      Choose a model for future turns
-  /usage           Token usage this session
-  /approval <m>    suggest | auto-edit | full-auto
-  /exit, /quit     Leave  (Ctrl-D also works)
-`;
+function slashHelp(): string {
+  return panel(
+    'commands',
+    [
+      '/help           Show this',
+      '/clear          Forget the conversation so far',
+      '/model [id]     Choose a model for future turns',
+      '/status         Show the live session HUD',
+      '/usage          Token usage this session',
+      '/approval <m>   suggest | auto-edit | full-auto',
+      '/exit, /quit    Leave (Ctrl-D also works)',
+    ],
+    terminalWidth(),
+  );
+}
 
 async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOptions): Promise<number> {
   const history = await loadHistory();
-  err(`${Style.dim('Type your request. /help for commands, Ctrl-D to exit.')}\n\n`);
+  err(`${Style.dim(wrapText('Type your request. /help for commands, Ctrl-D to exit.', terminalWidth()))}\n\n`);
 
   // Seed readline's history so up-arrow works across sessions.
   const rlAny = rl as unknown as { history?: string[] };
@@ -293,7 +300,7 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
       const [cmd, ...args] = input.slice(1).split(/\s+/);
       if (cmd === 'exit' || cmd === 'quit') break;
       if (cmd === 'help') {
-        err(SLASH_HELP);
+        err(`${slashHelp()}\n`);
         continue;
       }
       if (cmd === 'clear') {
@@ -303,6 +310,22 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
       }
       if (cmd === 'usage') {
         err(`${Style.dim(formatUsage(agent.usage))}\n`);
+        continue;
+      }
+      if (cmd === 'status') {
+        err(
+          `${statusPanel(
+            {
+              model: agent.model,
+              provider: provider.label,
+              approval: opts.cfg.approval,
+              cwd: opts.cwd,
+              ...(currentBranch(opts.cwd) ? { branch: currentBranch(opts.cwd) } : {}),
+              usage: formatUsage(agent.usage),
+            },
+            terminalWidth(),
+          )}\n`,
+        );
         continue;
       }
       if (cmd === 'model') {
