@@ -1,4 +1,4 @@
-import type { ModelInfo } from '../providers/types.ts';
+import type { ModelInfo, Provider } from '../providers/types.ts';
 import { FibonacciError } from '../errors.ts';
 import { Style, supportsUnicode, visibleWidth } from './ansi.ts';
 
@@ -49,4 +49,17 @@ export function resolveModelChoice(input: string, models: ModelInfo[], current: 
   }
 
   throw new FibonacciError(`Unknown model selection "${choice}".`);
+}
+
+/** Validate a direct model id only when the provider promises a complete catalog. */
+export async function resolveRequestedModel(provider: Provider, requested: string): Promise<string> {
+  const model = requested.trim();
+  if (model === '') throw new FibonacciError('Model id cannot be empty.');
+  if (!provider.modelListIsAuthoritative) return model;
+
+  const models = await provider.listModels();
+  if (!models.some((candidate) => candidate.id === model)) {
+    throw new FibonacciError(`Model "${model}" is not available for ${provider.label}.`);
+  }
+  return model;
 }

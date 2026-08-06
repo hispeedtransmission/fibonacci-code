@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { modelMenu, resolveModelChoice } from '../src/ui/model-selector.ts';
+import { modelMenu, resolveModelChoice, resolveRequestedModel } from '../src/ui/model-selector.ts';
+import type { Provider } from '../src/providers/types.ts';
 import { stripAnsi, visibleWidth } from '../src/ui/ansi.ts';
 
 const models = [
@@ -29,5 +30,22 @@ describe('model selector', () => {
   test('rejects an out-of-range number or unknown id', () => {
     assert.throws(() => resolveModelChoice('3', models, 'gpt-5.6-sol'), /Unknown model selection/);
     assert.throws(() => resolveModelChoice('not-real', models, 'gpt-5.6-sol'), /Unknown model selection/);
+  });
+
+  test('authoritative catalogs reject unknown direct model ids while advisory catalogs accept them', async () => {
+    const provider = (authoritative: boolean): Provider => ({
+      id: 'fake',
+      label: 'Fake',
+      defaultModel: 'fake-1',
+      isSubscription: authoritative,
+      modelListIsAuthoritative: authoritative,
+      async listModels() {
+        return [{ id: 'fake-1' }];
+      },
+      async *stream() {},
+    });
+
+    await assert.rejects(() => resolveRequestedModel(provider(true), 'fake-2'), /not available/);
+    assert.equal(await resolveRequestedModel(provider(false), 'fake-2'), 'fake-2');
   });
 });

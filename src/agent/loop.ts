@@ -46,7 +46,7 @@ export interface AgentEvent {
 export interface AgentOptions {
   provider: Provider;
   model: string;
-  instructions: string;
+  instructions: string | ((model: string, approval: ApprovalMode) => string);
   tools: Tool[];
   root: string;
   approval: ApprovalMode;
@@ -121,6 +121,15 @@ export class Agent {
    */
   async *send(userMessage: string, signal: AbortSignal): AsyncGenerator<AgentEvent> {
     this.#items.push({ type: 'message', role: 'user', content: userMessage });
+    // A user turn may span several provider requests around tool calls. Keep its
+    // model, approval policy, and system prompt coherent even if UI state is
+    // changed concurrently; mutations apply to the next user turn.
+    const model = this.#model;
+    const approval = this.#approval;
+    const instructions =
+      typeof this.#opts.instructions === 'function'
+        ? this.#opts.instructions(model, approval)
+        : this.#opts.instructions;
 
     for (let turn = 1; turn <= this.#opts.maxTurns; turn++) {
       yield { type: 'turn_start', turn };
@@ -131,8 +140,8 @@ export class Agent {
       try {
         const stream = this.#opts.provider.stream(
           {
-            model: this.#model,
-            instructions: this.#opts.instructions,
+            model,
+            instructions,
             items: this.#items,
             tools: this.#toolSpecs(),
             ...(this.#opts.reasoningEffort ? { reasoningEffort: this.#opts.reasoningEffort } : {}),
@@ -222,7 +231,7 @@ export class Agent {
 
         const ctx: ToolContext = {
           root: this.#opts.root,
-          approval: this.#approval,
+          approval,
           signal,
           commandTimeout: this.#opts.commandTimeout,
           requestApproval: this.#opts.requestApproval,

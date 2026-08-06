@@ -15,6 +15,7 @@
 import { homedir } from 'node:os';
 import {
   Style,
+  stripAnsi,
   styleCode,
   supportsUnicode,
   visibleWidth,
@@ -272,6 +273,15 @@ const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', 
 const ASCII_FRAMES = ['|', '/', '-', '\\'];
 const SPINNER_INTERVAL_MS = 80;
 
+/** Sanitize untrusted status text and bound it to the spinner's single owned row. */
+export function spinnerLabel(text: string, columns = terminalWidth()): string {
+  // OSC commands end with BEL or ST; CSI commands end with a final byte.
+  const withoutOsc = text.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '');
+  const withoutEscapes = withoutOsc.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+  const oneLine = withoutEscapes.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return truncateRight(oneLine || 'working', Math.max(1, columns - 4));
+}
+
 // Shared across instances rather than per-Spinner: only ever one spinner is
 // visible at a time in this CLI, and tracking "did *any* spinner hide the
 // cursor" here means the exit handler doesn't need to reason about which
@@ -302,8 +312,11 @@ export class Spinner {
     this.text = text;
     if (!this.enabled) return;
 
-    process.stderr.write(hideCursor());
-    cursorHiddenByASpinner = true;
+    if (this.timer !== undefined) clearInterval(this.timer);
+    if (!cursorHiddenByASpinner) {
+      process.stderr.write(hideCursor());
+      cursorHiddenByASpinner = true;
+    }
     this.draw();
     this.timer = setInterval(() => {
       this.frameIndex = (this.frameIndex + 1) % this.frames.length;
@@ -357,7 +370,7 @@ export class Spinner {
 
   private draw(): void {
     const frame = this.frames[this.frameIndex] ?? this.frames[0] ?? '';
-    process.stderr.write(`${eraseLine()}\r${Style.cyan(frame)} ${this.text}`);
+    process.stderr.write(`${eraseLine()}\r${Style.cyan(frame)} ${spinnerLabel(this.text)}`);
   }
 }
 
@@ -379,20 +392,16 @@ export function formatUsage(u: {
   return Style.dim(parts.join(' · '));
 }
 
-/**
- * Word wrap that never splits a word — and therefore never splits an ANSI
- * escape sequence, since an escape only ever appears glued to the text it
- * colours, never as its own whitespace-delimited token. The one thing this
- * does not do is hard-break a single word longer than `width` (e.g. a very
- * long path with no spaces); that's left to overflow its line rather than
- * risk cutting an escape sequence in half.
- */
+const wrapSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/** Width-safe wrapping. Styling is dropped when wrapping to prevent SGR state leaking across rows. */
 export function wrapText(text: string, width: number, indent = ''): string {
+  const wrapInput = text.includes('\x1b') ? stripAnsi(text) : text;
   const indentWidth = visibleWidth(indent);
   const avail = Math.max(1, width - indentWidth);
   const lines: string[] = [];
 
-  for (const paragraph of text.split('\n')) {
+  for (const paragraph of wrapInput.split('\n')) {
     if (paragraph === '') {
       lines.push(indent);
       continue;
@@ -402,18 +411,18 @@ export function wrapText(text: string, width: number, indent = ''): string {
     let currentWidth = 0;
     for (const originalWord of paragraph.split(' ')) {
       const chunks: string[] = [];
-      if (!originalWord.includes('\x1b') && visibleWidth(originalWord) > avail) {
+      if (visibleWidth(originalWord) > avail) {
         let chunk = '';
         let chunkWidth = 0;
-        for (const char of originalWord) {
-          const charWidth = visibleWidth(char);
-          if (chunk !== '' && chunkWidth + charWidth > avail) {
+        for (const { segment } of wrapSegmenter.segment(originalWord)) {
+          const segmentWidth = visibleWidth(segment);
+          if (chunk !== '' && chunkWidth + segmentWidth > avail) {
             chunks.push(chunk);
             chunk = '';
             chunkWidth = 0;
           }
-          chunk += char;
-          chunkWidth += charWidth;
+          chunk += segment;
+          chunkWidth += segmentWidth;
         }
         if (chunk !== '') chunks.push(chunk);
       } else {

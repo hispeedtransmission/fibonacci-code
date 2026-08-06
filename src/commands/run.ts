@@ -25,7 +25,7 @@ import {
   toolLine,
   wrapText,
 } from '../ui/render.ts';
-import { modelMenu, resolveModelChoice } from '../ui/model-selector.ts';
+import { modelMenu, resolveModelChoice, resolveRequestedModel } from '../ui/model-selector.ts';
 import { completeRepl } from '../ui/completion.ts';
 
 /**
@@ -86,13 +86,14 @@ export async function runCommand(opts: RunOptions): Promise<number> {
 
   const projectDoc = await loadProjectDoc(cwd);
   const branch = currentBranch(cwd);
-  const instructions = buildSystemPrompt({
-    cwd,
-    approval: cfg.approval,
-    model,
-    ...(projectDoc ? { projectDoc } : {}),
-    ...(branch ? { gitBranch: branch } : {}),
-  });
+  const instructions = (activeModel: string, activeApproval: ApprovalMode) =>
+    buildSystemPrompt({
+      cwd,
+      approval: activeApproval,
+      model: activeModel,
+      ...(projectDoc ? { projectDoc } : {}),
+      ...(branch ? { gitBranch: branch } : {}),
+    });
 
   let rl: Interface | undefined;
   const ensureReadline = (): Interface => {
@@ -348,12 +349,22 @@ async function repl(agent: Agent, provider: Provider, rl: Interface, opts: RunOp
       if (cmd === 'model') {
         const requested = args.join(' ').trim();
         if (requested !== '') {
-          agent.setModel(requested);
-          err(`${Style.green('✓')} Model set to ${Style.bold(agent.model)} for future turns.\n`);
+          try {
+            agent.setModel(await resolveRequestedModel(provider, requested));
+            err(`${Style.green('✓')} Model set to ${Style.bold(agent.model)} for future turns.\n`);
+          } catch (error) {
+            err(`${Style.yellow('!')} ${(error as Error).message} Current model: ${agent.model}.\n`);
+          }
           continue;
         }
 
-        const models = await provider.listModels();
+        let models;
+        try {
+          models = await provider.listModels();
+        } catch (error) {
+          err(`${Style.yellow('!')} Could not list models: ${(error as Error).message}. Current model: ${agent.model}.\n`);
+          continue;
+        }
         if (models.length === 0) {
           err(`${Style.dim(`No model list is available. Set one explicitly with /model <id>. Current: ${agent.model}`)}\n`);
           continue;

@@ -105,12 +105,10 @@ export const Style = {
   bgCyan: styler('46'),
 } as const;
 
-// Matches CSI sequences (`\x1b[...<final byte>`) and the simpler OSC/other
-// escapes we might ever emit ourselves. We only ever *produce* CSI SGR
-// sequences in this file, so that's the form this needs to strip reliably;
-// broader coverage here is defensive, not load-bearing.
+// Strip CSI (including private/colon forms) and OSC commands such as terminal
+// hyperlinks and clipboard sequences. OSC may terminate with BEL or ST.
 // eslint-disable-next-line no-control-regex
-const ANSI_PATTERN = /\x1b\[[0-9;]*[A-Za-z]/g;
+const ANSI_PATTERN = /\x1b(?:\][^\x07]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~])/g;
 
 export function stripAnsi(s: string): string {
   return s.replace(ANSI_PATTERN, '');
@@ -150,20 +148,24 @@ function isWide(code: number): boolean {
   );
 }
 
-/**
- * Terminal column width of `s`: strips ANSI first, then counts each
- * remaining code point as 0 (zero-width/combining), 1, or 2 (East Asian
- * wide) columns. See the module comment for what this approximation does
- * not cover.
- */
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const EMOJI_CLUSTER = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
+
+/** Terminal column width after stripping terminal control sequences. */
 export function visibleWidth(s: string): number {
   const stripped = stripAnsi(s);
   let width = 0;
-  for (const ch of stripped) {
-    const code = ch.codePointAt(0);
-    if (code === undefined) continue;
-    if (isZeroWidth(code)) continue;
-    width += isWide(code) ? 2 : 1;
+  for (const { segment } of graphemeSegmenter.segment(stripped)) {
+    // Terminals render emoji and joined emoji sequences as one two-cell glyph.
+    if (EMOJI_CLUSTER.test(segment)) {
+      width += 2;
+      continue;
+    }
+    for (const ch of segment) {
+      const code = ch.codePointAt(0);
+      if (code === undefined || isZeroWidth(code)) continue;
+      width += isWide(code) ? 2 : 1;
+    }
   }
   return width;
 }

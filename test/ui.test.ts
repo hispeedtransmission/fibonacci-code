@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { labeledPanel, panel, statusPanel, wrapText } from '../src/ui/render.ts';
+import { labeledPanel, panel, spinnerLabel, statusPanel, wrapText } from '../src/ui/render.ts';
 import { stripAnsi, visibleWidth } from '../src/ui/ansi.ts';
 
 describe('responsive terminal rendering', () => {
@@ -49,5 +49,30 @@ describe('responsive terminal rendering', () => {
       assert.match(stripAnsi(rendered), new RegExp(field));
     }
     assert.ok(stripAnsi(rendered).split('\n').every((line) => visibleWidth(line) <= 42), rendered);
+  });
+
+  test('spinner labels are one sanitized row bounded to terminal width', () => {
+    const label = spinnerLabel('run tests\n\x1b]52;c;payload\x07\x1b[31m' + 'x'.repeat(40), 20);
+
+    assert.equal(label.includes('\n'), false);
+    assert.equal(label.includes('\x1b'), false);
+    assert.ok(visibleWidth(label) <= 16, label); // reserve frame + separator
+  });
+
+  test('terminal width handles emoji graphemes and strips modern escape sequences', () => {
+    assert.equal(visibleWidth('😀'), 2);
+    assert.equal(visibleWidth('👩‍💻'), 2);
+    assert.equal(visibleWidth('\x1b]8;;https://example.com\x07link\x1b]8;;\x07'), 4);
+    assert.equal(visibleWidth('\x1b[?25ltext\x1b[?25h'), 4);
+  });
+
+  test('wrapping never leaks ANSI styles or splits joined emoji', () => {
+    const styled = wrapText('\x1b[1mhello world again\x1b[0m', 7);
+    assert.equal(styled.includes('\x1b'), false);
+    assert.ok(styled.split('\n').every((line) => visibleWidth(line) <= 7));
+
+    const emoji = wrapText('👩‍💻👩‍💻👩‍💻', 4);
+    assert.equal(emoji.replaceAll('\n', ''), '👩‍💻👩‍💻👩‍💻');
+    assert.ok(emoji.split('\n').every((line) => visibleWidth(line) <= 4));
   });
 });

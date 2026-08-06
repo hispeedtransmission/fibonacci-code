@@ -126,6 +126,7 @@ export class ChatGptProvider implements Provider {
   readonly label = 'ChatGPT subscription';
   readonly defaultModel = CHATGPT_DEFAULT_MODEL;
   readonly isSubscription = true;
+  readonly modelListIsAuthoritative = true;
 
   #auth: AuthContext;
   /** Stable per-process id; the backend uses it to group a conversation. */

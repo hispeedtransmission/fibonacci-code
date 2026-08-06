@@ -285,6 +285,68 @@ describe('Agent loop', () => {
     assert.equal(agent.transcript.length, 4);
   });
 
+  test('setModel rejects an empty id atomically and trims valid ids', () => {
+    const agent = new Agent(baseOptions(scriptedProvider([]), []));
+
+    assert.throws(() => agent.setModel('   '), /Model id cannot be empty/);
+    assert.equal(agent.model, 'fake-1');
+    agent.setModel('  fake-2  ');
+    assert.equal(agent.model, 'fake-2');
+  });
+
+  test('model changes during send affect the next user turn, not tool continuations', async () => {
+    let agent!: Agent;
+    const requests: CompletionRequest[] = [];
+    let call = 0;
+    const provider: Provider = {
+      id: 'fake',
+      label: 'Fake',
+      defaultModel: 'fake-1',
+      isSubscription: false,
+      async listModels() {
+        return [{ id: 'fake-1' }, { id: 'fake-2' }];
+      },
+      async *stream(req) {
+        requests.push(structuredClone({ ...req, items: req.items as Item[] }));
+        call++;
+        if (call === 1) {
+          agent.setModel('fake-2');
+          yield { type: 'item', item: { type: 'tool_call', id: 'c1', name: 'echo', args: '{}' } };
+          yield { type: 'done', stopReason: 'tool_calls' };
+        } else {
+          yield { type: 'done', stopReason: 'stop' };
+        }
+      },
+    };
+    agent = new Agent(baseOptions(provider, [echoTool()]));
+
+    await drain(agent, 'one');
+    await drain(agent, 'two');
+
+    assert.deepEqual(requests.map((request) => request.model), ['fake-1', 'fake-1', 'fake-2']);
+  });
+
+  test('instruction factories receive the model and approval snapshot for each user turn', async () => {
+    const provider = scriptedProvider([
+      [{ type: 'done', stopReason: 'stop' }],
+      [{ type: 'done', stopReason: 'stop' }],
+    ]);
+    const agent = new Agent({
+      ...baseOptions(provider, []),
+      instructions: (model: string, approval: string) => `active: ${model} ${approval}`,
+    });
+
+    await drain(agent, 'one');
+    agent.setModel('fake-2');
+    agent.setApproval('auto-edit');
+    await drain(agent, 'two');
+
+    assert.deepEqual(provider.requests.map((request) => request.instructions), [
+      'active: fake-1 full-auto',
+      'active: fake-2 auto-edit',
+    ]);
+  });
+
   test('setApproval changes the mode used by subsequent tool calls', async () => {
     let observedApproval = '';
     const provider = scriptedProvider([

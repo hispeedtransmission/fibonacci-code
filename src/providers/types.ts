@@ -119,6 +119,8 @@ export interface Provider {
   readonly defaultModel: string;
   /** True when this provider bills a subscription rather than per-token API credit. */
   readonly isSubscription: boolean;
+  /** True when listModels() is a complete allowlist rather than a best-effort catalog. */
+  readonly modelListIsAuthoritative?: boolean;
 
   /** Enumerate models. May return a static list when the backend has no models endpoint. */
   listModels(signal?: AbortSignal): Promise<ModelInfo[]>;
