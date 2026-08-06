@@ -2,6 +2,8 @@ import type { ModelInfo, Provider } from '../providers/types.ts';
 import { FibonacciError } from '../errors.ts';
 import { sanitizeInline, Style, supportsUnicode, visibleWidth } from './ansi.ts';
 
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
 function truncateRight(text: string, width: number): string {
   if (visibleWidth(text) <= width) return text;
   const ellipsis = supportsUnicode() ? '…' : '...';
@@ -9,10 +11,10 @@ function truncateRight(text: string, width: number): string {
   if (budget === 0) return ellipsis.slice(0, width);
   let kept = '';
   let used = 0;
-  for (const char of text) {
-    const charWidth = visibleWidth(char);
+  for (const { segment } of graphemeSegmenter.segment(text)) {
+    const charWidth = visibleWidth(segment);
     if (used + charWidth > budget) break;
-    kept += char;
+    kept += segment;
     used += charWidth;
   }
   return kept + ellipsis;
@@ -46,7 +48,14 @@ export function modelMenu(models: ModelInfo[], current: string, terminalColumns:
   }
 
   const hidden = models.length - visible.length;
-  const hint = hidden > 0 ? `${hidden} more · enter exact model id · q cancel` : 'Enter a number or model id · q to cancel';
+  const hint =
+    width <= 24
+      ? hidden > 0
+        ? `${hidden} more · q cancel`
+        : 'q cancel · # or id'
+      : hidden > 0
+        ? `${hidden} more · enter exact model id · q cancel`
+        : 'Enter a number or model id · q to cancel';
   lines.push(Style.dim(truncateRight(hint, width)));
   return lines.join('\n');
 }
@@ -55,7 +64,6 @@ export function modelMenu(models: ModelInfo[], current: string, terminalColumns:
 export function resolveModelChoice(input: string, models: ModelInfo[], current: string): string | undefined {
   const choice = input.trim();
   if (choice === '') return current;
-  if (/^(q|quit|cancel|esc)$/i.test(choice)) return undefined;
 
   if (/^\d+$/.test(choice)) {
     const selected = models[Number.parseInt(choice, 10) - 1];
@@ -63,6 +71,7 @@ export function resolveModelChoice(input: string, models: ModelInfo[], current: 
   } else {
     const selected = models.find((model) => model.id === choice);
     if (selected) return selected.id;
+    if (/^(q|quit|cancel|esc)$/i.test(choice)) return undefined;
   }
 
   throw new FibonacciError(`Unknown model selection "${choice}".`);

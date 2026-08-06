@@ -170,4 +170,9 @@ describe('responsive terminal rendering', () => {
     assert.equal(emoji.replaceAll('\n', ''), '👩‍💻👩‍💻👩‍💻');
     assert.ok(emoji.split('\n').every((line) => visibleWidth(line) <= 4));
   });
+
+  test('width-one wrapping substitutes rather than overflowing a two-cell grapheme', () => {
+    const wrapped = wrapText('😀', 1);
+    assert.ok(wrapped.split('\n').every((line) => visibleWidth(line) <= 1), wrapped);
+  });
 });

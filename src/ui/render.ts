@@ -467,6 +467,13 @@ export function wrapText(text: string, width: number, indent = ''): string {
         let chunkWidth = 0;
         for (const { segment } of wrapSegmenter.segment(originalWord)) {
           const segmentWidth = visibleWidth(segment);
+          if (segmentWidth > avail) {
+            if (chunk !== '') chunks.push(chunk);
+            chunk = '';
+            chunkWidth = 0;
+            chunks.push((supportsUnicode() ? '…' : '...').slice(0, avail));
+            continue;
+          }
           if (chunk !== '' && chunkWidth + segmentWidth > avail) {
             chunks.push(chunk);
             chunk = '';

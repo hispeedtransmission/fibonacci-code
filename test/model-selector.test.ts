@@ -36,6 +36,19 @@ describe('model selector', () => {
     }
   });
 
+  test('keeps cancellation discoverable in narrow selectors', () => {
+    const rendered = stripAnsi(modelMenu(models, 'gpt-5.6-sol', 20));
+    assert.match(rendered, /q cancel/i);
+    assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= 20), rendered);
+  });
+
+  test('never truncates a model id inside a joined emoji grapheme', () => {
+    const rendered = stripAnsi(modelMenu([{ id: '👩‍💻-model' }], 'other', 7));
+    assert.equal(rendered.includes('👩‍…'), false, rendered);
+    assert.match(rendered, /👩‍💻/u);
+    assert.ok(rendered.split('\n').every((line) => visibleWidth(line) <= 7), rendered);
+  });
+
   test('caps huge catalogs without hiding the current model or breaking catalog numbers', () => {
     const catalog = Array.from({ length: 80 }, (_, index) => ({ id: `model-${index + 1}` }));
     const rendered = stripAnsi(modelMenu(catalog, 'model-80', 50));
@@ -49,6 +62,11 @@ describe('model selector', () => {
     assert.equal(resolveModelChoice('gpt-5.6-sol', models, 'other'), 'gpt-5.6-sol');
     assert.equal(resolveModelChoice('', models, 'gpt-5.6-sol'), 'gpt-5.6-sol');
     assert.equal(resolveModelChoice('q', models, 'gpt-5.6-sol'), undefined);
+  });
+
+  test('prefers an exact catalog id over cancellation aliases', () => {
+    assert.equal(resolveModelChoice('q', [{ id: 'q' }], 'other'), 'q');
+    assert.equal(resolveModelChoice('cancel', [{ id: 'cancel' }], 'other'), 'cancel');
   });
 
   test('rejects an out-of-range number or unknown id', () => {
