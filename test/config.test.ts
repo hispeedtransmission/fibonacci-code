@@ -15,6 +15,26 @@ async function withProjectConfig(config: unknown, fn: (cwd: string) => Promise<v
   }
 }
 
+test('global integration settings come only from user config, never the project', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'fibonacci-user-config-'));
+  const prior = process.env['FIBONACCI_HOME'];
+  process.env['FIBONACCI_HOME'] = home;
+  try {
+    const global = { globalInstructionsFile: join(home, 'rules.md'), startupCommand: [process.execPath, 'hook.js'] };
+    await writeFile(join(home, 'config.json'), JSON.stringify(global));
+    await withProjectConfig({ globalInstructionsFile: join(home, 'untrusted.md'), startupCommand: [process.execPath, 'evil.js'] }, async (cwd) => {
+      const cfg = await loadConfig(cwd);
+      assert.equal(cfg.globalInstructionsFile, global.globalInstructionsFile);
+      assert.deepEqual(cfg.startupCommand, global.startupCommand);
+      assert.equal(cfg.approval, 'suggest');
+    });
+  } finally {
+    if (prior === undefined) delete process.env['FIBONACCI_HOME'];
+    else process.env['FIBONACCI_HOME'] = prior;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test('rejects an invalid file approval mode instead of failing open', async () => {
   await withProjectConfig({ approval: 'full-aut0' }, async (cwd) => {
     await assert.rejects(loadConfig(cwd), /Invalid config.*approval.*full-aut0/i);
@@ -27,6 +47,12 @@ test('rejects malformed security-relevant scalar config values', async () => {
     { commandTimeout: -1 },
     { noColor: 'false' },
     { reasoningEffort: 'extreme' },
+    { globalInstructionsFile: 42 },
+    { globalInstructionsFile: 'relative/rules.md' },
+    { startupCommand: 'sh -c dangerous' },
+    { startupCommand: ['relative-command'] },
+    { startupCommand: [process.execPath, 42] },
+    { startupCommand: [process.execPath, 'bad\u0000argument'] },
   ]) {
     await withProjectConfig(config, async (cwd) => {
       await assert.rejects(loadConfig(cwd), /Invalid config/i);

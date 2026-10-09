@@ -28,6 +28,7 @@ import {
 } from '../ui/render.ts';
 import { modelMenu, resolveModelChoice, resolveRequestedModel } from '../ui/model-selector.ts';
 import { completeRepl } from '../ui/completion.ts';
+import { loadGlobalInstructions, runStartupCommand } from '../integration.ts';
 
 /**
  * The run command: one-shot and interactive.
@@ -108,6 +109,15 @@ function currentBranch(cwd: string): string | undefined {
 
 export async function runCommand(opts: RunOptions): Promise<number> {
   const { cfg, cwd } = opts;
+  if (!opts.interactive && !opts.prompt?.trim()) {
+    err(`${Style.red('error')} No prompt given and stdin is not a terminal.\n`);
+    err(`${Style.dim('Try: fib "your question"   or   fib --help')}\n`);
+    return ExitCode.USAGE;
+  }
+  const globalInstructions = await loadGlobalInstructions(cfg.globalInstructionsFile);
+  if (await runStartupCommand(cfg.startupCommand, opts.interactive) === 'failed') {
+    err('warning: startupCommand failed or timed out; continuing without startup integration.\n');
+  }
   const { provider, auth, model: requestedModel } = await createProvider(cfg);
   const model = await resolveRequestedModel(provider, requestedModel);
 
@@ -118,6 +128,7 @@ export async function runCommand(opts: RunOptions): Promise<number> {
       cwd,
       approval: activeApproval,
       model: activeModel,
+      globalInstructions,
       ...(projectDoc ? { projectDoc } : {}),
       ...(branch ? { gitBranch: branch } : {}),
     });
@@ -168,11 +179,7 @@ export async function runCommand(opts: RunOptions): Promise<number> {
 
   if (!opts.interactive) {
     const prompt = opts.prompt ?? '';
-    if (prompt.trim() === '') {
-      err(`${Style.red('error')} No prompt given and stdin is not a terminal.\n`);
-      err(`${Style.dim('Try: fib "your question"   or   fib --help')}\n`);
-      return ExitCode.USAGE;
-    }
+
     let code: number;
     try {
       code = await runTurn(agent, prompt, opts.quiet);

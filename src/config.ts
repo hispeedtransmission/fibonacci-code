@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import type { ReasoningEffort } from './providers/types.ts';
 import { UsageError } from './errors.ts';
 import { projectConfigCandidates, userConfigPath } from './paths.ts';
@@ -39,6 +40,10 @@ export interface Config {
   commandTimeout: number;
   /** Disable colour/ANSI. Also honours NO_COLOR. */
   noColor: boolean;
+  /** User config only. Empty disables global instruction loading. */
+  globalInstructionsFile: string;
+  /** User config only. Executable and literal argv; no shell expansion. */
+  startupCommand: string[];
 }
 
 /**
@@ -68,6 +73,8 @@ export const DEFAULT_CONFIG: Config = {
   maxTurns: 40,
   commandTimeout: 120,
   noColor: false,
+  globalInstructionsFile: '',
+  startupCommand: [],
 };
 
 /** CLI flags, which outrank every file and env var. */
@@ -138,6 +145,14 @@ function validateProfile(value: unknown, path: string, field: string, requirePro
 }
 
 function validateConfigLayer(layer: Record<string, unknown>, path: string): void {
+  const globalFile = layer['globalInstructionsFile'];
+  if (globalFile !== undefined && (typeof globalFile !== 'string' || globalFile.includes('\0') || (globalFile !== '' && !isAbsolute(globalFile)))) {
+    throw invalidConfig(path, 'globalInstructionsFile must be an absolute path or empty string');
+  }
+  const startup = layer['startupCommand'];
+  if (startup !== undefined && (!Array.isArray(startup) || startup.some((arg) => typeof arg !== 'string' || arg.includes('\0')) || (startup.length > 0 && !isAbsolute(startup[0] as string)))) {
+    throw invalidConfig(path, 'startupCommand must be an argv array with an absolute executable path, or []');
+  }
   if (layer['defaultProfile'] !== undefined) requireNonemptyString(layer['defaultProfile'], path, 'defaultProfile');
   if (layer['model'] !== undefined) requireNonemptyString(layer['model'], path, 'model');
   if (layer['approval'] !== undefined && !(APPROVAL_MODES as readonly unknown[]).includes(layer['approval'])) {
@@ -227,7 +242,9 @@ export async function loadConfig(
   for (const candidate of projectConfigCandidates(cwd)) {
     const layer = await readJsonIfExists(candidate);
     if (layer) {
-      cfg = mergeLayer(cfg, layer);
+      // A repository must not install host commands or replace global rules.
+      const { globalInstructionsFile: _global, startupCommand: _startup, ...projectLayer } = layer;
+      cfg = mergeLayer(cfg, projectLayer);
       sources.push(candidate);
       break; // first match wins; don't merge both filenames
     }

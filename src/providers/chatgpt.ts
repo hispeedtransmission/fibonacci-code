@@ -33,9 +33,9 @@ import { VERSION } from '../version.ts';
 export const CHATGPT_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
 
 /**
- * Models available to a ChatGPT subscription, verified by probing the live
- * endpoint. This backend has no models-list endpoint, so the list is static and
- * `fib models` revalidates it on request.
+ * Historical subscription model suggestions, not a complete live catalog.
+ * Explicit model ids must reach the backend, which validates availability;
+ * otherwise a newly released model is rejected by this stale local snapshot.
  */
 export const CHATGPT_MODELS: ModelInfo[] = [
   {
@@ -126,7 +126,7 @@ export class ChatGptProvider implements Provider {
   readonly label = 'ChatGPT subscription';
   readonly defaultModel = CHATGPT_DEFAULT_MODEL;
   readonly isSubscription = true;
-  readonly modelListIsAuthoritative = true;
+  readonly modelListIsAuthoritative = false;
 
   #auth: AuthContext;
   /** Stable per-process id; the backend uses it to group a conversation. */

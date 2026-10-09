@@ -1,9 +1,17 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { toResponsesInput, normalizeOutputItem } from '../src/providers/chatgpt.ts';
+import { ChatGptProvider, toResponsesInput, normalizeOutputItem } from '../src/providers/chatgpt.ts';
+import { resolveRequestedModel } from '../src/ui/model-selector.ts';
 import { toChatMessages } from '../src/providers/openai.ts';
 import type { Item } from '../src/providers/types.ts';
 
+test('a static subscription catalog cannot reject explicitly configured newer models', async () => {
+  const provider = new ChatGptProvider({ kind: 'none', description: 'test, no credentials', async headers() { return {}; } });
+  assert.equal(await resolveRequestedModel(provider, 'gpt-6.1-sol'), 'gpt-6.1-sol');
+  // The service, not this stale local snapshot, decides actual availability.
+  assert.equal(await resolveRequestedModel(provider, 'future-explicit-model'), 'future-explicit-model');
+  await assert.rejects(resolveRequestedModel(provider, ' '), /cannot be empty/);
+});
 /**
  * Serialization tests.
  *

@@ -204,9 +204,32 @@ Precedence, highest first: **CLI flags → environment → project config → us
 
 Environment: `FIBONACCI_PROFILE`, `FIBONACCI_MODEL`, `FIBONACCI_APPROVAL`, `FIBONACCI_MAX_TURNS`, `FIBONACCI_API_KEY`, `FIBONACCI_HOME`, plus `OPENAI_API_KEY`, `OPENAI_BASE_URL` and `NO_COLOR`.
 
+The subscription model list is a static set of suggestions, not an authoritative live catalog. An explicitly configured newer model is passed to the service for validation rather than rejected locally; listing a model is not proof of account availability.
+
 ### Project instructions
 
 Fibonacci reads the first of `FIBONACCI.md`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules` it finds in the workspace and appends it to the system prompt — so a repo that already documents its conventions for another agent works here unchanged.
+
+### Global instructions and session startup
+
+These settings are supported **only in the user config** (`~/.fibonacci/config.json`, or `$FIBONACCI_HOME/config.json`). Project configs cannot replace them or install startup commands. They are disabled by default:
+
+```json
+{
+  "globalInstructionsFile": "/absolute/path/to/shared/RULES.md",
+  "startupCommand": ["/absolute/path/to/python3", "/absolute/path/to/session_start.py", "fibonacci"]
+}
+```
+
+`globalInstructionsFile` is read once per session (symlinks supported), after native guidance and **before project instructions**, which retain priority. The file must be a readable regular file no larger than 64 KiB; invalid files fail visibly instead of silently dropping rules. Set `""` to disable. No project documents are created or overwritten, and changes to the shared file apply to the next session.
+
+`startupCommand` is a literal argv array: the first element must be an absolute executable path; no shell expansion occurs. Prefer absolute paths for script arguments too. It runs once for an interactive session or one-shot prompt, never for `help`, `version`, `config`, `models`, `auth`, or empty noninteractive input. Set `[]` or `FIBONACCI_DISABLE_STARTUP=1` to disable. Child processes receive `FIBONACCI_STARTUP_ACTIVE=1`, preventing recursive startup dispatch.
+
+The command receives only `{"session_id":"<fresh UUID>","interactive":true,"headless":false}` on stdin (booleans reflect the actual mode). No prompts, transcripts, workspace paths, or model responses are sent. stdout/stderr are discarded and never added to model context. A nonzero exit or three-second timeout emits a generic warning and continues. Hooks are trusted host programs, not sandboxed tools: they inherit your environment and permissions, run before provider authentication, and are not gated by model approval mode. Only configure programs you have reviewed. A timeout kills the direct child, not a process tree; helpers must not launch long-lived descendants.
+
+For a desktop/Obsidian helper, keep it nonrecursive and independently gate GUI opening on a local foreground terminal, console ownership, opt-outs, and a cooldown. Session metadata is not semantic memory: write only deliberate non-sensitive outcomes using an available, authorized integration and verify the target. Fibonacci does not scrape or export transcripts, and this startup capability does not add MCP support or automatic vault writeback. `fib config --json` shows both resolved settings without executing the hook.
+
+Integration regression tests: `pnpm test`; production build: `pnpm build`; exercise the built entry point with `FIBONACCI_TEST_CLI=dist/cli.js pnpm exec node --test --experimental-strip-types test/cli-integration.test.ts`. These tests use a loopback protocol fixture, not paid inference.
 
 ## Tools
 

@@ -23,6 +23,8 @@ export interface PromptContext {
   cwd: string;
   approval: ApprovalMode;
   model: string;
+  /** User-wide guidance, below project-specific instructions. */
+  globalInstructions?: string;
   /** Contents of a project AGENTS.md / FIBONACCI.md, when present. */
   projectDoc?: string;
   /** Short description of the repo state, e.g. current git branch. */
@@ -75,6 +77,10 @@ export function buildSystemPrompt(ctx: PromptContext): string {
 - Report honestly. If tests fail, say so and show the output. If you skipped part of the task, say which part and why. Never describe work as finished when it is not.
 - Be brief in prose. The user is reading a terminal, not a document. Skip preamble ("I'll help you with that"), skip summaries of what you just did when the tool output already showed it.`,
   );
+
+  if (ctx.globalInstructions?.trim()) {
+    sections.push(`# Global instructions\n${ctx.globalInstructions.trim()}`);
+  }
 
   if (ctx.projectDoc && ctx.projectDoc.trim() !== '') {
     sections.push(
