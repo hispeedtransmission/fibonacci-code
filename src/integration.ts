@@ -14,13 +14,21 @@ import { UsageError } from './errors.ts';
 export async function runStartupCommand(command: string[], interactive: boolean): Promise<'ok' | 'failed' | 'skipped'> {
   if (!command.length || process.env['FIBONACCI_STARTUP_ACTIVE'] === '1' || process.env['FIBONACCI_DISABLE_STARTUP'] === '1') return 'skipped';
   return await new Promise((resolve) => {
-    const child = spawn(command[0]!, command.slice(1), {
-      shell: false,
-      timeout: 3000,
-      killSignal: 'SIGKILL',
-      env: { ...process.env, FIBONACCI_STARTUP_ACTIVE: '1' },
-      stdio: ['pipe', 'ignore', 'ignore'],
-    });
+    let child;
+    try {
+      child = spawn(command[0]!, command.slice(1), {
+        shell: false,
+        timeout: 3000,
+        killSignal: 'SIGKILL',
+        env: { ...process.env, FIBONACCI_STARTUP_ACTIVE: '1' },
+        stdio: ['pipe', 'ignore', 'ignore'],
+      });
+    } catch {
+      // OS failures such as E2BIG can throw before a ChildProcess exists.
+      // Never expose argv, inherited environment, or raw error details.
+      resolve('failed');
+      return;
+    }
     child.once('error', () => resolve('failed'));
     child.once('close', (code) => resolve(code === 0 ? 'ok' : 'failed'));
     child.stdin.on('error', () => {}); // Early child exit must not crash the CLI.
@@ -36,9 +44,15 @@ export async function loadGlobalInstructions(path: string): Promise<string> {
     try {
       if (!(await file.stat()).isFile()) throw new Error('not a regular file');
       const bytes = Buffer.alloc(65_537);
-      const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
-      if (bytesRead > 65_536) throw new Error('over 64 KiB');
-      return bytes.subarray(0, bytesRead).toString('utf8');
+      let total = 0;
+      // A successful read may be short; only EOF or limit+1 ends the read.
+      while (total < bytes.length) {
+        const { bytesRead } = await file.read(bytes, total, bytes.length - total, total);
+        if (bytesRead === 0) break;
+        total += bytesRead;
+      }
+      if (total > 65_536) throw new Error('over 64 KiB');
+      return bytes.subarray(0, total).toString('utf8');
     } finally {
       await file.close();
     }

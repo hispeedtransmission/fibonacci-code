@@ -7,10 +7,8 @@ import { Style } from '../ui/ansi.ts';
  * `fib models`.
  *
  * Deliberately answers a question the user actually has ("what can I type after
- * -m?") rather than dumping a raw API response. For the subscription backend
- * that means being explicit that the list is short *because the subscription
- * restricts it*, not because Fibonacci is being conservative — otherwise the
- * one-entry list reads like a bug.
+ * -m?") rather than dumping a raw API response. A static subscription catalog
+ * offers suggestions, not an exhaustive gate on explicit model IDs.
  */
 export async function modelsCommand(cfg: ResolvedConfig, asJson: boolean): Promise<number> {
   const { provider, model: current } = await createProvider(cfg);
@@ -41,8 +39,8 @@ export async function modelsCommand(cfg: ResolvedConfig, asJson: boolean): Promi
   if (provider.isSubscription) {
     out(
       `${Style.dim(
-        'ChatGPT subscriptions are limited to the models above; API-only models such as gpt-5-codex are\n' +
-          'rejected by this endpoint. To reach those, use an API key: fib -P openai -m <model>.',
+        'These are static suggestions, not an exhaustive list of subscription models.\n' +
+          'Try an explicit ID with -m <id> or /model <id>; the service determines account availability.',
       )}\n`,
     );
   } else {

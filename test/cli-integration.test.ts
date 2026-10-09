@@ -28,7 +28,7 @@ test('native CLI loads global rules and invokes startup once, never for utility 
   const call = async (args: string[]) => await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(process.execPath, ['--experimental-strip-types', cli, ...args], {
       cwd: root,
-      env: { PATH: process.env['PATH'], FIBONACCI_HOME: root, NO_COLOR: '1' },
+      env: { PATH: process.env['PATH'], HOME: root, FIBONACCI_HOME: root, CODEX_HOME: root, TMPDIR: tmpdir(), NO_COLOR: '1' },
       stdio: ['pipe', 'pipe', 'pipe'], timeout: 15_000,
     });
     let stdout = ''; let stderr = '';

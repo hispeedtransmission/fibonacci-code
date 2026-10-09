@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import childProcess from 'node:child_process';
+import fs, { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -29,6 +31,20 @@ test('startup passes only fresh session metadata over stdin and suppresses outpu
   }
 });
 
+test('startup resolves failed on a synchronous E2BIG spawn exception', async (t) => {
+  const spawnMock = t.mock.method(childProcess, 'spawn', () => {
+    throw Object.assign(new Error('PRIVATE_ARGV_AND_ENV_SENTINEL'), { code: 'E2BIG' });
+  });
+  syncBuiltinESMExports();
+  try {
+    assert.equal(await runStartupCommand([process.execPath, '-e', 'process.exit(7)'], false), 'failed');
+    assert.equal(spawnMock.mock.callCount(), 1);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
 test('startup guards prevent recursion and allow opt-out; child failures are bounded', async () => {
   assert.equal(await runStartupCommand([], false), 'skipped');
   for (const key of ['FIBONACCI_STARTUP_ACTIVE', 'FIBONACCI_DISABLE_STARTUP']) {
@@ -47,6 +63,52 @@ test('startup guards prevent recursion and allow opt-out; child failures are bou
   assert.equal(await runStartupCommand([process.execPath, '-e', 'setTimeout(() => {}, 4500)'], false), 'failed');
   assert.ok(performance.now() - start < 4000, 'startup timeout must be three seconds, not child lifetime');
 });
+
+for (const size of [37, 65_536, 65_537, 131_072]) {
+  test(`global instructions handle eight-byte reads at ${size} bytes and close the descriptor`, async (t) => {
+    const root = await mkdtemp(join(tmpdir(), 'fib-short-read-'));
+    const path = join(root, 'rules.md');
+    const content = 'x'.repeat(size - 8) + 'SUFFIX_!';
+    const realOpen = fs.open;
+    let closed = false;
+    let totalRead = 0;
+    let calls = 0;
+    t.mock.method(fs, 'open', async (...args: Parameters<typeof fs.open>) => {
+      const file = await realOpen(...args);
+      const realRead = file.read.bind(file);
+      const realClose = file.close.bind(file);
+      t.mock.method(file, 'read', async (buffer: Buffer, offset: number, length: number, position: number) => {
+        calls++;
+        const result = await realRead(buffer, offset, Math.min(length, 8), position);
+        totalRead += result.bytesRead;
+        return result;
+      });
+      t.mock.method(file, 'close', async () => {
+        await realClose();
+        closed = true;
+      });
+      return file;
+    });
+    syncBuiltinESMExports();
+    try {
+      await writeFile(path, content);
+      if (size > 65_536) {
+        await assert.rejects(loadGlobalInstructions(path), /global instructions/i);
+      } else {
+        const actual = await loadGlobalInstructions(path);
+        assert.equal(actual.length, content.length, 'must not truncate at the first short read');
+        assert.equal(actual, content);
+      }
+      assert.ok(calls > 1);
+      assert.equal(totalRead, Math.min(size, 65_537), 'never read beyond limit+1');
+      assert.equal(closed, true, 'descriptor must close on success and rejection');
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test('global instruction loader follows the canonical symlink and fails visibly on invalid input', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fib-global-'));
